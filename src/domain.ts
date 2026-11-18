@@ -116,7 +116,8 @@ export type Item = {name:string; grade:Grade; reason:string; improvement:string;
 export function assessmentStatus(item:Item) {
   return item.grade==='判定不能'?(item.evidence.length?'確認待ち':'根拠不足'):item.grade
 }
-export type Report = {learning:Item[]; teaching:Item[]; questions:string; dialogue:string; outcomes:string; improvements:string; examples:string; next:string; mode:'demo'|'local'|'ai'; conversation?: DialogueSummary; chatNotes?: boolean}
+export type ImprovementScene = {title:string; keep:string; change:string; question:string; check:string; evidence:Evidence[]}
+export type Report = {learning:Item[]; teaching:Item[]; questions:string; dialogue:string; outcomes:string; improvements:string; examples:string; next:string; mode:'demo'|'local'|'ai'; conversation?: DialogueSummary; chatNotes?: boolean; improvementScenes?: ImprovementScene[]}
 export const reportModes = {demo:'デモ評価',local:'端末内分析',ai:'AI分析'} as const
 export const sections = {questions:'発問の分析',dialogue:'生徒との対話',outcomes:'授業の成果',improvements:'改善点',examples:'具体的な改善発問・活動例',next:'次時への提案'} as const
 export function evidence(value:unknown, turns:Turn[], limit=3):Evidence[] {

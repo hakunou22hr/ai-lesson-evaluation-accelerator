@@ -1,3 +1,4 @@
+import {ImprovementCard} from './ImprovementScenes'
 import {ReadMore} from './ReadMore'
 import {ChatComparison} from './ChatComparison'
 import {teacherLabel,studentLabel,dialogueObservation,relevantScene,type DialogueScene,reactionLabels,summarizeDialogue,zoomTranscript} from './dialogue'
@@ -216,6 +217,11 @@ function App(){
             {report&&<>
               <p className="muted">{reportModes[report.mode]}結果。授業研究用の所見です。{report.mode==='local'&&' 発言候補と参考判定を確認してから、必要に応じて評価を修正してください。'}</p>
               {original?.mode==='local'&&turns.length>0&&<ChatComparison lesson={lesson} rubrics={rubrics} focus={focus} turns={turns} baseline={original} current={report} apply={setReport}/>}
+              {!!report.improvementScenes?.length&&<section><h3>次の授業で試すこと</h3>
+                {report.improvementScenes.map((scene,i)=><ImprovementCard key={i} scene={scene}>
+                  <button type="button" className="secondary" onClick={()=>setReport({...report,improvementScenes:report.improvementScenes?.filter((_,index)=>index!==i)})}>採用を解除</button>
+                </ImprovementCard>)}
+              </section>}
               <p className="muted">確認待ち：発言候補あり。根拠不足：規準と照合できる発言候補なし。</p>
               {report.conversation&&<section className="result conversation">
                 <h3>教師の働きかけと児童・生徒の反応</h3>

@@ -149,6 +149,13 @@ test('ChatGPTの評価案を原文・時刻・観点と照合する',async()=>{
   assert.equal(output.learning[0].grade,'B')
   assert.equal(output.learning[0].source,'chatgpt')
   assert.equal(output.learning[0].evidence.length,2)
+  assert.deepEqual(output.improvementScenes,[])
+  const scene={title:'測定後の問い返し',keep:'予想を聞く',change:'結果を見てもう一度説明する',question:'どの測定値が根拠ですか？',check:'同じ生徒の前後の発言を比べる',evidence:[{id:2,time:'00:12',quote:'電流も２倍です。'}]}
+  const withScene={...input,improvementScenes:[scene]}
+  assert.deepEqual(readChatResult(JSON.stringify(withScene),focus,turns).improvementScenes,[scene])
+  assert.throws(()=>readChatResult(JSON.stringify({...withScene,improvementScenes:[{...scene,evidence:[{...scene.evidence[0],time:'00:13'}]}]}),focus,turns),/改善案1.*照合できません/)
+  assert.throws(()=>readChatResult(JSON.stringify({...withScene,improvementScenes:[scene,scene,scene,scene]}),focus,turns),/3件以内/)
+
   assert.throws(()=>readChatResult(encoded.replace('00:12','00:13'),focus,turns),/照合できません/)
   assert.throws(()=>readChatResult(encoded.replace('電流も２倍です。','元にない発言'),focus,turns),/照合できません/)
   assert.deepEqual(readChatResult(encoded,[],turns).ignored,[focus[0].name])

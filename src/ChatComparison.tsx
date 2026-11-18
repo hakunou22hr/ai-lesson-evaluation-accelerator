@@ -1,3 +1,4 @@
+import {ImprovementCard} from './ImprovementScenes'
 import {ReadMore} from './ReadMore'
 import {useState} from 'react'
 import {assessmentStatus,sections,type Focus,type Lesson,type Report,type Rubric,type Turn} from './domain'
@@ -33,6 +34,18 @@ export function ChatComparison({lesson,rubrics,focus,turns,baseline,current,appl
     {message&&<p role="status">{message}</p>}
     {error&&<p className="alert error" role="alert">{error}</p>}
     {candidate&&<>
+      {candidate.improvementScenes.length>0&&<section>
+        <h4>ChatGPTが提案した授業改善の場面</h4>
+        {candidate.improvementScenes.map((scene,index)=>{
+          const selected=current.improvementScenes||[]
+          const adopted=selected.findIndex(item=>JSON.stringify(item)===JSON.stringify(scene))
+          return <ImprovementCard key={index} scene={scene}>
+            <button type="button" className="secondary" disabled={adopted<0&&selected.length>=3}
+              onClick={()=>apply({...current,improvementScenes:adopted>=0?selected.filter((_,i)=>i!==adopted):[...selected,scene]})}>{adopted>=0?'この改善案の採用を解除':'この改善案を採用'}</button>
+          </ImprovementCard>
+        })}
+        {(current.improvementScenes?.length||0)>=3&&<p className="muted">採用は最大3件です。別の案を採用するには、採用済みの案を一つ解除してください。</p>}
+      </section>}
       {candidate.missing.length>0&&<p className="alert">結果がないため現在の評価を使用します：{candidate.missing.join('、')}</p>}
       {candidate.ignored.length>0&&<p className="alert">現在の設定にないため取り込み対象外：{candidate.ignored.join('、')}</p>}
       {(['learning','teaching'] as const).flatMap(group=>candidate[group].map((item,index)=>{

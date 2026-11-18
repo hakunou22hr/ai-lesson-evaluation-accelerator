@@ -206,7 +206,7 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
       write(`${lesson.school}${lesson.grade}年 ｜ ${lesson.course||lesson.subject} ｜ ${lesson.minutes}分 ｜ ${lesson.date||'授業日未入力'}`,1)
       write(lesson.unit+(lesson.teacher?' ｜ '+lesson.teacher:''),1,19)
       write('本時の目標　'+lesson.goal,2)
-      write(reportModes[report.mode]+(report.chatNotes||[...report.learning,...report.teaching].some(item=>item.source==='chatgpt')?'・ChatGPT評価案を反映':'')+'・授業研究用',1,13,'#396588')
+      write(reportModes[report.mode]+(report.chatNotes||report.improvementScenes?.length||[...report.learning,...report.teaching].some(item=>item.source==='chatgpt')?'・ChatGPT評価案を反映':'')+'・授業研究用',1,13,'#396588')
       distribution()
       timingSnapshot()
       heading('3観点に関連する学習状況')
@@ -219,7 +219,9 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
       heading('次の一手')
       box(M,y,CONTENT,46,'#eaf5f0')
       y+=5
-      write(report.next,2,12,'#204c40',12,CONTENT-24)
+      const priority=report.improvementScenes?.[0]
+      const brief=priority?`${priority.evidence[0]?.time?priority.evidence[0].time+' ｜ ':''}${priority.question}`:report.next
+      write(brief,2,12,'#204c40',12,CONTENT-24)
     } else {
       chart()
       flow()
@@ -325,6 +327,16 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
     '本時の目標　'+lesson.goal,
   ])
   field('判定の読み方','「確認待ち」は関連する発言があり、授業者の確認が必要な項目です。「根拠不足」は記録から関連する発言を確認できなかった項目です。A・B・Cは設定した規準に照らした参考判定です。','#eef3f8')
+  for(const [index,scene] of (report.improvementScenes||[]).entries()){
+    if(y+116>BOTTOM) newPage()
+    detail(`次の授業で試すこと ${index+1}｜${scene.title}`,true)
+    field('残したい働きかけ',scene.keep,'#eaf3fc')
+    field('次回変えること',scene.change,'#fff5df')
+    field('その場で使う問い',scene.question,'#e7f4ee')
+    field('改善を確かめる方法',scene.check,'#e7f4ee')
+    field('根拠になった発言',scene.evidence.map(entry=>`行${entry.id} ${entry.time}「${entry.quote}」`).join('\n'),'#eff2f6')
+    y+=12
+  }
   for(const [group,items] of [['生徒の学習状況',report.learning],['教師の指導',report.teaching]] as const){
     for(const item of items) assessment(group,item)
   }

@@ -119,3 +119,8 @@ blockquote{margin:8px 0 0;padding:7px 10px;background:#f2f6fb;border-left:3px so
 .long-text>div{white-space:pre-wrap}
 .long-text-preview{max-height:16em;overflow:hidden}
 .long-text .text-button{color:#174d81;text-decoration:underline;padding:4px 0;min-height:32px}
+.improvement-scene{border-left:4px solid #3c826e}
+.improvement-scene dl{margin:10px 0}
+.improvement-scene dt{font-weight:700;color:#245646}
+.improvement-scene dd{margin:0 0 10px}
+.improvement-scene>button{margin-top:10px}
