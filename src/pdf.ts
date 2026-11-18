@@ -74,26 +74,39 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
       heading('判定の内訳')
       const keys=Object.keys(grades) as (keyof typeof grades)[]
       const counts=keys.map(grade=>items.filter(item=>assessmentStatus(item)===grade).length)
-      let x=M
-      counts.forEach((count,index)=>{
-        if(!count) return
-        const width=CONTENT*count/items.length
-        ctx.fillStyle=grades[keys[index]].bar
-        ctx.fillRect(x,y,width,14)
-        x+=width
-      })
-      y+=20
+      const width=(CONTENT-40)/5
       keys.forEach((grade,index)=>{
-        const x=M+index*140
-        ctx.fillStyle=grades[grade].bar;ctx.fillRect(x,y+5,10,10)
-        ctx.fillStyle=grades[grade].ink;ctx.font='13px "Report Japanese"'
-        ctx.fillText(`${grade}　${counts[index]}件`,x+16,y)
+        const x=M+index*(width+10)
+        const tone=grades[grade]
+        box(x,y,width,64,tone.fill,tone.fill)
+        ctx.fillStyle=tone.ink;ctx.font='13px "Report Japanese"'
+        ctx.fillText(grade,x+10,y+7)
+        ctx.font='22px "Report Japanese"'
+        ctx.fillText(`${counts[index]}件`,x+10,y+23)
+        ctx.fillStyle='#ffffff';ctx.fillRect(x+10,y+52,width-20,5)
+        ctx.fillStyle=tone.bar;ctx.fillRect(x+10,y+52,(width-20)*counts[index]/items.length,5)
       })
-      y+=24
+      y+=69
     }
+    const timingSnapshot=()=>{
+      const data=report.conversation
+      heading('応答までの時間')
+      const height=44
+      box(M,y,CONTENT,height,'#edf5fc')
+      y+=5
+      if(!data?.timed||data.median===undefined){
+        write('計測 0件  ／  中央値 —',1,15,'#174d81',12)
+        write('教師と生徒の時刻がそろう発問・指示と応答を計測します。',1,10,'#536d86',12)
+      }else{
+        write(`中央値 ${Number(data.median.toFixed(2))} 秒  ／  計測 ${data.timed}件`,1,15,'#174d81',12)
+        write('発問・指示の開始から応答の開始まで',1,10,'#536d86',12)
+      }
+      y+=3
+    }
+    const conclusion=(item:Item)=>item.reason.trim().match(/^[^。！？\r\n]+[。！？]?/)?.[0]||item.reason
     const evaluationCards=(items:Item[],columns:number,expanded:boolean)=>{
       const gap=10,width=(CONTENT-gap*(columns-1))/columns
-      const height=expanded?142:57
+      const height=expanded?101:53
       let top=y
       items.forEach((item,i)=>{
         if(i&&i%columns===0) top+=height+gap
@@ -108,11 +121,8 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
         if(expanded){
           y=top+32
           write(item.name,2,14,'#143956',inset,width-24)
-          y=top+76
-          write(item.reason,2,12,'#394c62',inset,width-24)
-          y=top+115
-          const lead=item.evidence[0]
-          write(lead?`根拠  行${lead.id}${lead.time?' · '+lead.time:''}`:'根拠発言の記載なし',1,11,'#536d86',inset,width-24)
+          y=top+75
+          write(conclusion(item),1,12,'#394c62',inset,width-24)
         }else if(columns===3){
           y=top+8
           const lead=item.evidence[0]
@@ -123,7 +133,7 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
           y=top+8
           write(item.name,1,12,'#143956',inset+74,width-98)
           y=top+31
-          write(item.reason,1,11,'#394c62',inset,width-24)
+          write(conclusion(item),1,11,'#394c62',inset,width-24)
         }
       })
       if(items.length) y=top+height+3
@@ -198,6 +208,7 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
       write('本時の目標　'+lesson.goal,2)
       write(reportModes[report.mode]+(report.chatNotes||[...report.learning,...report.teaching].some(item=>item.source==='chatgpt')?'・ChatGPT評価案を反映':'')+'・授業研究用',1,13,'#396588')
       distribution()
+      timingSnapshot()
       heading('3観点に関連する学習状況')
       evaluationCards(report.learning,3,true)
       if(report.teaching.length){
@@ -205,7 +216,10 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
         evaluationCards(report.teaching,report.teaching.length>10?3:2,false)
         if(report.teaching.length>10) write('各観点の理由は末尾の全文で確認できます。',1,11,'#536d86')
       }
-      heading('授業全体の成果');write(report.outcomes,3)
+      heading('次の一手')
+      box(M,y,CONTENT,46,'#eaf5f0')
+      y+=5
+      write(report.next,2,12,'#204c40',12,CONTENT-24)
     } else {
       chart()
       flow()
