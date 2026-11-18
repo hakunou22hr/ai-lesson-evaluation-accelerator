@@ -1,5 +1,5 @@
 import type {Lesson,Report,Source,Item} from './domain'
-import {sections} from './domain'
+import {reportModes,sections} from './domain'
 const W=794,H=1123,M=47,BOTTOM=1055
 let loaded:Promise<FontFace>|undefined
 function font() {
@@ -58,7 +58,7 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
       write(`${lesson.school}${lesson.grade}年 ｜ ${lesson.course||lesson.subject} ｜ ${lesson.minutes}分 ｜ ${lesson.date||'授業日未入力'}`,1)
       write(lesson.unit+(lesson.teacher?' ｜ '+lesson.teacher:''),1,19)
       write('本時の目標　'+lesson.goal,2)
-      write(report.mode==='demo'?'デモ・参考評価':'AI分析・授業研究用',1,13,'#396588')
+      write(reportModes[report.mode]+'・授業研究用',1,13,'#396588')
       heading('3観点に関連する学習状況')
       report.learning.forEach(item=>row(item,true))
       heading('授業者が指定した指導上の観点')

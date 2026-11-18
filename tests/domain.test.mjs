@@ -1,6 +1,7 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {anonymize,chunks,demo,demoReport,drafts,evidence,focusDraft,focuses,math,normalizeItem,parseTurns,sample,sources} from '../src/domain.ts'
+import {anonymize,chunks,demo,drafts,evidence,focusDraft,focuses,math,normalizeItem,parseTurns,sample,sources} from '../src/domain.ts'
+import {localReport} from '../src/local-analysis.ts'
 import worker from '../worker/index.ts'
 
 test('中2理科、高校数学Ⅱの規準と資料',()=>{
@@ -26,11 +27,37 @@ test('分割が末尾を含む全行を維持する',()=>{
   assert.deepEqual(parts.flat(),turns)
   assert.ok(parts.every(part=>part.reduce((sum,t)=>sum+JSON.stringify(t).length,0)<=3000))
 })
-test('追加観点と判定不能をデモ結果へ反映する',()=>{
-  const report=demoReport(parseTurns(sample),focusDraft([focuses[1],focuses[10]]))
+test('端末内分析は長い独自の授業記録の末尾まで確認する',()=>{
+  const turns=parseTurns([
+    ...Array.from({length:950},(_,i)=>`話者未確定の発言 ${i}`),
+    '[18:21] 教師：なぜ電流は電圧に比例するのですか？',
+    '[18:26] 生徒A：電圧が倍になると電流も倍になったからです。',
+    '教師：ほかの測定値と比べるとどうですか？',
+  ].join('\n'))
+  const focus=focusDraft([focuses[1],focuses[10]])
+  const report=localReport(demo,drafts(demo),focus,turns)
+  assert.equal(report.mode,'local')
+  assert.match(report.questions,/発問候補 2件/)
+  assert.match(report.dialogue,/行951.*行952.*行953/)
+  assert.match(report.outcomes,/953行/)
   assert.equal(report.teaching[0].grade,'B')
+  assert.deepEqual(report.teaching[0].evidence.map(e=>e.time),['18:21','18:26'])
   assert.equal(report.teaching[1].grade,'判定不能')
-  assert.equal(report.learning[2].grade,'判定不能')
+  assert.equal(report.learning[0].evidence[0].id,952)
+  assert.ok(report.learning.every(item=>item.grade==='判定不能'))
+  for(const entry of [...report.teaching,...report.learning].flatMap(item=>item.evidence)){
+    assert.ok(turns[entry.id-1].text.includes(entry.quote))
+  }
+  const changed=localReport(demo,drafts(demo),[{...focus[0],B:'生徒同士で議論を深める。'}],turns)
+  assert.equal(changed.teaching[0].grade,'判定不能')
+})
+test('話者不明の発言から発問・応答を推定しない',()=>{
+  const report=localReport(demo,drafts(demo),focusDraft([focuses[1]]),parseTurns('なぜ電流は電圧に比例するのですか？\n電圧が倍になると電流も倍になったからです。'))
+  assert.match(report.questions,/発問候補 0件/)
+  assert.equal(report.teaching[0].grade,'判定不能')
+  assert.ok(report.learning.every(item=>!item.evidence.length))
+})
+test('匿名化',()=>{
   assert.equal(anonymize('山田太郎さん a@example.test','山田太郎'),'［匿名］さん ［匿名］')
 })
 test('Worker は管理者設定、利用コード、利用上限を強制する',async()=>{

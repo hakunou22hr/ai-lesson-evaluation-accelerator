@@ -107,7 +107,8 @@ export function chunks(turns:Turn[], limit=10000): Turn[][] {
 export type Grade = 'A'|'B'|'C'|'判定不能'
 export type Evidence = {id:number; quote:string; time:string}
 export type Item = {name:string; grade:Grade; reason:string; improvement:string; evidence:Evidence[]}
-export type Report = {learning:Item[]; teaching:Item[]; questions:string; dialogue:string; outcomes:string; improvements:string; examples:string; next:string; mode:'demo'|'ai'}
+export type Report = {learning:Item[]; teaching:Item[]; questions:string; dialogue:string; outcomes:string; improvements:string; examples:string; next:string; mode:'demo'|'local'|'ai'}
+export const reportModes = {demo:'デモ評価',local:'端末内分析',ai:'AI分析'} as const
 export const sections = {questions:'発問の分析',dialogue:'生徒との対話',outcomes:'授業の成果',improvements:'改善点',examples:'具体的な改善発問・活動例',next:'次時への提案'} as const
 export function evidence(value:unknown, turns:Turn[], limit=3):Evidence[] {
   if(!Array.isArray(value)) return []
@@ -122,16 +123,4 @@ export function normalizeItem(value:Partial<Item>|undefined,name:string,turns:Tu
   if(learningIndex>=0) verified=verified.filter(e=>/^(?:生徒|児童|学生|student|pupil)/i.test(turns.find(t=>t.id===e.id)?.speaker||''))
   const grade=verified.length && learningIndex!==2 && ['A','B','C'].includes(value?.grade||'') ? value!.grade! : '判定不能'
   return {name,grade,evidence:verified,reason:grade==='判定不能'?(learningIndex===2?'継続的な取組と学習の調整を確認するには、複数回の振り返り・再試行の記録が必要です。':verified.length&&value?.reason?value.reason:'記録から評価に必要な根拠を確認できません。'):(value?.reason||'根拠発言を参照してください。'),improvement:value?.improvement||'対応する場面の発言やワークシートを確認してください。'}
-}
-export function demoReport(turns:Turn[], focus:Focus[]):Report {
-  const original=turns.map(t=>t.text).join('\n')===parseTurns(sample).map(t=>t.text).join('\n')
-  const item=(index:number,grade:Grade,reason:string,improvement:string)=>{
-    const turn=turns[index]
-    return {grade,reason,improvement,evidence:turn?[{id:turn.id,quote:turn.text,time:turn.time}]:[]}
-  }
-  const unknown=(improvement:string)=>({grade:'判定不能' as const,reason:'対応する記録と評価規準を授業者が照合してください。',improvement,evidence:[]})
-  const learning = perspectives.map((name,i)=>normalizeItem(original&&i<2?item(i===0?3:5,'B',i===0?'測定値の対応を具体的に示している。':'条件を一定にして倍率を比較し、比例を説明している。','測定値を座標に記入して関係を説明させる。'):unknown('ワークシートや振り返りを確認する。'),name,turns,i))
-  const teaching = focus.map(({name})=>normalizeItem(original&&[0,1,3].some(i=>focuses[i]===name)?item(2,'B','予想を測定値で確かめるよう促している。','どの結果なら予想を修正するかも尋ねる。'):unknown('指定観点が現れる場面の記録を追加する。'),name,turns))
-  const questions=turns.filter(t=>/^(教師|教員|先生|teacher)/i.test(t.speaker)&&/[？?]|か[。]?$/.test(t.text))
-  return {mode:'demo',learning,teaching,questions:questions.length?`教師と明示された発問候補 ${questions.length}件。例：行${questions[0].id}「${questions[0].text}」`:'教師と明示された発問候補はありません。', dialogue:original?'測定値を答えた後、教師が別の測定値で検証を促し、生徒が比例関係を説明した。':'発言者と発言のつながりを原文で確認してください。',outcomes:original?'予想、測定値、比例の説明が順に記録されている。':'評価結果の編集欄で、記録から確認できた成果を整理できます。',improvements:original?'比例という結論が成り立つ条件を、生徒の説明からさらに確認できる。':'評価に必要な資料を授業後に補う。',examples:original?'「グラフが原点を通らなかったら、どの測定や条件を見直しますか？」':'「どの発言や記録からその考えを説明できますか？」',next:original?'異なる抵抗のグラフを重ね、傾きと抵抗の関係を予想して検証する。':'振り返りの問いを設定し、考えを修正した理由を記録する。'}
 }

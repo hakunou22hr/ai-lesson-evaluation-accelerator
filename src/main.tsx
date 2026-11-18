@@ -1,8 +1,9 @@
 import {useState,type ReactNode} from 'react'
 import {createRoot} from 'react-dom/client'
 import {Activity,ArrowLeft,ArrowRight,BookOpen,Check,ChevronRight,ClipboardList,Download,FileText,FlaskConical,History,Settings,ShieldCheck,Sparkles,Upload} from 'lucide-react'
-import {anonymize,chunks,courses,demo,demoReport,drafts,empty,evidence,fields,focusDraft,focuses,math,normalizeItem,parseTurns,perspectives,sample,schools,sections,sources,type Focus,type Grade,type Item,type Lesson,type Report,type Rubric,type Turn} from './domain'
+import {anonymize,chunks,courses,demo,drafts,empty,evidence,fields,focusDraft,focuses,math,normalizeItem,parseTurns,perspectives,reportModes,sample,schools,sections,sources,type Focus,type Grade,type Item,type Lesson,type Report,type Rubric,type Turn} from './domain'
 import {ai,endpoint} from './ai'
+import {localReport} from './local-analysis'
 import {readFile} from './files'
 import {createPdf,filename} from './pdf'
 import './style.css'
@@ -46,7 +47,7 @@ function App(){
   const [original,setOriginal]=useState<Report|null>(null)
   const [records,setRecords]=useState(()=>load<Saved[]>('lesson-history-v1',[]))
   const [modal,setModal]=useState<'settings'|'history'|null>(null)
-  const [mode,setMode]=useState<'demo'|'ai'>('demo')
+  const [mode,setMode]=useState<'local'|'ai'>('local')
   const [key,setKey]=useState('')
   const [consent,setConsent]=useState(false)
   const [busy,setBusy]=useState('')
@@ -98,7 +99,7 @@ function App(){
     if(text.length>100000) throw Error('文字起こしは10万文字以内にしてください。')
     const learning=perspectives
     let result:Report
-    if(mode==='demo') result=demoReport(turns,focus)
+    if(mode==='local') result=localReport(lesson,rubrics,focus,turns)
     else {
       if(!checked||!consent) throw Error('送信前に匿名化と外部送信条件を確認してください。')
       const batches=chunks(turns)
@@ -134,13 +135,13 @@ function App(){
     const pdf=await createPdf(lesson,report,curriculum)
     pdf.save(filename(lesson));setNotice('A4縦・2ページのPDFを作成しました。')
   })
-  const preset=(kind:'science'|'math')=>{setMode('demo');reset(kind==='math'?math:demo,kind==='science'?sample:'');setNotice(kind==='science'?'架空の理科授業と文字起こしを読み込みました。':'数学Ⅱのサンプル授業を読み込みました。')}
+  const preset=(kind:'science'|'math')=>{setMode('local');reset(kind==='math'?math:demo,kind==='science'?sample:'');setNotice(kind==='science'?'架空の理科授業と文字起こしを読み込みました。':'数学Ⅱのサンプル授業を読み込みました。')}
   return <>
     <header className="header"><div className="wrap header-inner">
       <a className="brand" href="./"><span className="brand-icon"><Activity size={23}/></span><span>AI授業評価 <b>Accelerator</b><small>授業研究・授業改善支援システム</small></span></a>
       <div className="tools"><button className="ghost" onClick={()=>setModal('history')} disabled={!!busy}><History size={17}/> <span>履歴</span></button><button className="ghost" onClick={()=>setModal('settings')} disabled={!!busy}><Settings size={17}/> <span>設定</span></button></div>
     </div></header>
-    <section className="hero"><div className="wrap hero-inner"><div><p className="eyebrow"><span/> 授業研究ワークスペース</p><h1>授業評価ワークスペース</h1><p>授業の目標と記録から、次の授業につながる振り返りを。</p></div><span className="mode"><FlaskConical size={16}/> {mode==='demo'?'デモモード':'本番AIモード'}</span></div></section>
+    <section className="hero"><div className="wrap hero-inner"><div><p className="eyebrow"><span/> 授業研究ワークスペース</p><h1>授業評価ワークスペース</h1><p>授業の目標と記録から、次の授業につながる振り返りを。</p></div><span className="mode"><FlaskConical size={16}/> {mode==='local'?'端末内分析・APIキー不要':'本番AIモード'}</span></div></section>
     <main className="wrap">
       <nav className="steps" aria-label="進行状況">{steps.map((label,index)=><button key={label} type="button" disabled={index>maxStep||!!busy} onClick={()=>move(index)} aria-current={index===step?'step':undefined} className={index===step?'active':index<step?'complete':''}><span>{index<step?<Check size={14}/>:index+1}</span>{label}{index<5&&<ChevronRight className="step-arrow" size={15}/>}</button>)}</nav>
       <div className="layout">
@@ -190,9 +191,9 @@ function App(){
             <div className="actions"><button className="secondary" onClick={()=>move(2)}><ArrowLeft size={16}/> 戻る</button><button className="primary" disabled={!turns.length||(mode==='ai'&&!checked)} onClick={()=>move(4)}>分析へ進む <ArrowRight size={16}/></button></div>
           </>}
           {step===4&&<>
-            <div className="actions analysis-actions"><button className="primary" disabled={!turns.length} onClick={analyze}><Sparkles size={16}/> {mode==='ai'?'AI授業分析を開始':'デモ評価を表示'}</button>{report&&<button className="secondary" onClick={()=>setEditing(!editing)}>{editing?'編集を閉じる':'評価を修正'}</button>}</div>
+            <div className="actions analysis-actions"><button className="primary" disabled={!turns.length} onClick={analyze}><Sparkles size={16}/> {mode==='ai'?'AI授業分析を開始':'端末内分析を開始'}</button>{report&&<button className="secondary" onClick={()=>setEditing(!editing)}>{editing?'編集を閉じる':'評価を修正'}</button>}</div>
             {report&&<>
-              <p className="muted">{report.mode==='demo'?'デモ評価・簡易確認':'AI分析結果'}。授業研究用の所見です。</p>
+              <p className="muted">{reportModes[report.mode]}結果。授業研究用の所見です。{report.mode==='local'&&' 発言候補と参考判定を確認してから、必要に応じて評価を修正してください。'}</p>
               {(['learning','teaching'] as const).map(group=><section key={group}><h3>{group==='learning'?'3観点に関連する学習状況':'授業者が指定した指導上の観点'}</h3>
                 {!report[group].length&&<p>追加観点はありません。</p>}
                 {report[group].map((item,i)=><article className="result" key={item.name}><h4><span className={'grade '+(grades.indexOf(item.grade)<3?item.grade:'unknown')}>{item.grade}</span>{item.name}</h4>
@@ -203,7 +204,7 @@ function App(){
             <div className="actions"><button className="secondary" onClick={()=>move(3)}><ArrowLeft size={16}/> 戻る</button><button className="primary" disabled={!report} onClick={()=>move(5)}>レポートへ進む <ArrowRight size={16}/></button></div>
           </>}
           {step===5&&report&&<>
-            <div className="report-preview"><FileText size={34}/><div><h3>{lesson.unit}</h3><p>{lesson.school}{lesson.grade}年・{lesson.course||lesson.subject}　／　{report.mode==='demo'?'デモ評価':'AI分析'}</p><p className="muted">A4縦・2ページ</p></div></div>
+            <div className="report-preview"><FileText size={34}/><div><h3>{lesson.unit}</h3><p>{lesson.school}{lesson.grade}年・{lesson.course||lesson.subject}　／　{reportModes[report.mode]}</p><p className="muted">A4縦・2ページ</p></div></div>
             <ol className="page-list"><li>授業評価結果・各観点の判定・授業の成果</li><li>根拠発言・対話と発問・改善提案・参照資料</li></ol>
             <p className="muted">履歴はこのブラウザーに保存します。文字起こし全文は保存対象外です。評価に含まれる引用や授業者名は残ります。</p>
             <div className="actions"><button className="secondary" onClick={()=>move(4)}><ArrowLeft size={16}/> 評価へ戻る</button><button className="secondary" onClick={save}><History size={16}/> 履歴を保存</button><button className="primary" onClick={download}><Download size={16}/> PDFをダウンロード</button></div>
@@ -212,7 +213,7 @@ function App(){
         </section>
         <aside>
           <section className="panel side demo-side"><span className="side-icon"><FlaskConical size={20}/></span><h3>サンプルで試す</h3><p>架空の授業情報を読み込み、評価規準やPDF出力を確認できます。</p><button className="secondary" disabled={!!busy} onClick={()=>preset('science')}>中2 理科｜電流とその利用 <ChevronRight size={16}/></button><button className="secondary" disabled={!!busy} onClick={()=>preset('math')}>高校 数学Ⅱ｜三角関数 <ChevronRight size={16}/></button><button className="text-button" disabled={!!busy} onClick={()=>{const saved=load<Lesson|null>('last-lesson-v1',null);if(saved) reset(saved);else setNotice('保存済みの授業設定はありません。')}}><History size={15}/> 前回の授業設定を読み込む</button></section>
-          <section className="panel side protection"><div><ShieldCheck size={20}/><h3>授業データの取り扱い</h3></div><p>デモモードでは授業データを外部に送信しません。本番AIを利用する場合は、学校の方針に従い送信前に匿名化してください。</p></section>
+          <section className="panel side protection"><div><ShieldCheck size={20}/><h3>授業データの取り扱い</h3></div><p>端末内分析では授業データを外部に送信しません。本番AIを利用する場合は、学校の方針に従い送信前に匿名化してください。</p></section>
         </aside>
       </div>
     </main>
@@ -220,11 +221,11 @@ function App(){
     {modal&&<div className="overlay" onClick={()=>setModal(null)}><section className="panel dialog" role="dialog" aria-modal="true" aria-label={modal==='settings'?'設定':'評価履歴'} onClick={e=>e.stopPropagation()}>
       <div className="dialog-head"><h2>{modal==='settings'?'設定':'評価履歴'}</h2><button className="secondary" autoFocus onClick={()=>setModal(null)}>閉じる</button></div>
       {modal==='settings'?<>
-        <p>デモは無料で、外部AIへデータを送信しません。</p>
+        <p>端末内分析はAPIキー不要です。授業記録はブラウザー内で処理されます。</p>
         <p>本番AIは学校管理のCloudflare Worker経由でOpenAI APIに送信します。APIの利用費用と利用上限があります。</p>
         <p>アプリは送信本文をサーバーに保存しません。API側の保持は通常最大30日（不正利用監視・契約等による例外あり）。APIデータは既定でモデル学習に使われません。削除の問い合わせは学校管理者に連絡してください。 <a target="_blank" rel="noreferrer" href="https://platform.openai.com/docs/guides/your-data">OpenAIのデータ管理</a></p>
         {endpoint?<><Field name="管理者が発行した利用コード"><input type="password" value={key} onChange={e=>setKey(e.target.value)} autoComplete="off"/></Field><label className="check"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>学校の承認を受け、個人情報を除いた授業目標・評価規準・文字起こしの外部送信条件を確認しました</label><button className="primary" disabled={!key.trim()||!consent} onClick={()=>{setMode('ai');setRubrics([]);setRubricApproved(false);invalidate();setChecked(false);setModal(null);move(0)}}>本番AIモードに切り替え</button></>:<p className="alert">この公開版の本番AIは未設定です。</p>}
-        {mode==='ai'&&<button className="secondary" onClick={()=>{setMode('demo');setKey('');setConsent(false);setRubrics([]);setRubricApproved(false);invalidate();setModal(null);move(0)}}>デモに切り替え</button>}
+        {mode==='ai'&&<button className="secondary" onClick={()=>{setMode('local');setKey('');setConsent(false);setRubrics([]);setRubricApproved(false);invalidate();setModal(null);move(0)}}>端末内分析に切り替え</button>}
       </>:<>
         <p className="muted">このブラウザーに明示的に保存した履歴（最大30件）。</p>
         {!records.length&&<p>保存した評価はありません。</p>}
