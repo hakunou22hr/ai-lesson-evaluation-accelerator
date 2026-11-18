@@ -1,3 +1,4 @@
+import {ReadMore} from './ReadMore'
 import {ChatComparison} from './ChatComparison'
 import {dialogueObservation,relevantScene,type DialogueScene,reactionLabels,summarizeDialogue,zoomTranscript} from './dialogue'
 import {useState,type ReactNode} from 'react'
@@ -12,7 +13,7 @@ import './style.css'
 
 const steps=['授業情報','評価規準','追加観点','文字起こし','授業分析','PDF出力']
 const titles=['授業情報を入力','評価規準を確認','重点的に見たい観点を追加','授業の文字起こしを読み込む','授業分析と評価','評価レポートを出力']
-const descriptions=['授業の基本情報と本時の目標を入力してください。入力内容をもとに評価規準の案を作成します。','3観点の規準案を授業に合わせて修正し、承認してください。','授業者の指導方法について、今回の振り返りで重視する項目を選べます。','授業の発言記録を読み込み、時刻・話者・匿名化の内容を確認します。','記録と確定した評価規準を照合します。結果は確認・修正できます。','評価結果と改善提案をA4縦・2ページのPDFにまとめます。']
+const descriptions=['授業の基本情報と本時の目標を入力してください。入力内容をもとに評価規準の案を作成します。','3観点の規準案を授業に合わせて修正し、承認してください。','授業者の指導方法について、今回の振り返りで重視する項目を選べます。','授業の発言記録を読み込み、時刻・話者・匿名化の内容を確認します。','記録と確定した評価規準を照合します。結果は確認・修正できます。','評価結果と改善提案を、概要2ページと全文付きのA4縦PDFにまとめます。']
 const grades:Grade[]=['A','B','C','判定不能']
 function DialogueExcerpt({scene}:{scene:DialogueScene}) {
   const lines=[['教師の指示・発問',scene.prompt],['最初の応答',scene.response],['教師の次の発問',scene.followUp],['次の応答',scene.followUpResponse]] as const
@@ -143,7 +144,7 @@ function App(){
   const download=()=>run('PDFを作成・検査中…',async()=>{
     if(!report) return
     const pdf=await createPdf(lesson,report,curriculum)
-    pdf.save(filename(lesson));setNotice('A4縦・2ページのPDFを作成しました。')
+    pdf.save(filename(lesson));setNotice(`概要と全文を含むPDFを作成しました（全${pdf.getNumberOfPages()}ページ）。`)
   })
   const preset=(kind:'science'|'math')=>{setMode('local');reset(kind==='math'?math:demo,kind==='science'?sample:'');setNotice(kind==='science'?'架空の理科授業と文字起こしを読み込みました。':'数学Ⅱのサンプル授業を読み込みました。')}
   return <>
@@ -240,15 +241,15 @@ function App(){
               {(['learning','teaching'] as const).map(group=><section key={group}><h3>{group==='learning'?'3観点に関連する学習状況':'授業者が指定した指導上の観点'}</h3>
                 {!report[group].length&&<p>追加観点はありません。</p>}
                 {report[group].map((item,i)=>{const status=assessmentStatus(item);const scene=relevantScene(report.conversation?.scenes||[],item.evidence);return <article className="result" key={item.name}><h4><span className={'grade '+(status==='確認待ち'?'review':status==='根拠不足'?'unknown':status)}>{status}</span>{item.name}</h4>
-                {editing?<><Field name="判定"><select value={item.grade} onChange={e=>editItem(group,i,{grade:e.target.value as Grade})}>{grades.map(g=><option key={g}>{g}</option>)}</select></Field><Field name="評価理由"><textarea value={item.reason} onChange={e=>editItem(group,i,{reason:e.target.value})}/></Field><Field name="改善提案"><textarea value={item.improvement} onChange={e=>editItem(group,i,{improvement:e.target.value})}/></Field></>:<><p>{item.reason}</p>{item.missing&&<p><b>確認したい資料</b>　{item.missing}</p>}<p><b>改善提案</b>　{item.improvement}</p></>}
+                {editing?<><Field name="判定"><select value={item.grade} onChange={e=>editItem(group,i,{grade:e.target.value as Grade})}>{grades.map(g=><option key={g}>{g}</option>)}</select></Field><Field name="評価理由"><textarea value={item.reason} onChange={e=>editItem(group,i,{reason:e.target.value})}/></Field><Field name="改善提案"><textarea value={item.improvement} onChange={e=>editItem(group,i,{improvement:e.target.value})}/></Field></>:<><ReadMore text={item.reason}/>{item.missing&&<ReadMore text={`確認したい資料　${item.missing}`}/>}<ReadMore text={`改善提案　${item.improvement}`}/></>}
                 {item.evidence.map(e=><blockquote key={e.id+e.quote}>行{e.id} {e.time}「{e.quote}」</blockquote>)}
                 {scene&&<details><summary>この観点の対話の流れ</summary><DialogueExcerpt scene={scene}/></details>}</article>})}</section>)}
-              {(Object.keys(sections) as (keyof typeof sections)[]).map(field=><article className="result" key={field}>{editing?<Field name={sections[field]}><textarea value={report[field]} onChange={e=>setReport({...report,[field]:e.target.value})}/></Field>:<><h4>{sections[field]}</h4><p>{report[field]}</p></>}</article>)}
+              {(Object.keys(sections) as (keyof typeof sections)[]).map(field=><article className="result" key={field}>{editing?<Field name={sections[field]}><textarea value={report[field]} onChange={e=>setReport({...report,[field]:e.target.value})}/></Field>:<><h4>{sections[field]}</h4><ReadMore text={report[field]}/></>}</article>)}
             </>}
             <div className="actions"><button className="secondary" onClick={()=>move(3)}><ArrowLeft size={16}/> 戻る</button><button className="primary" disabled={!report} onClick={()=>move(5)}>レポートへ進む <ArrowRight size={16}/></button></div>
           </>}
           {step===5&&report&&<>
-            <div className="report-preview"><FileText size={34}/><div><h3>{lesson.unit}</h3><p>{lesson.school}{lesson.grade}年・{lesson.course||lesson.subject}　／　{reportModes[report.mode]}</p><p className="muted">A4縦・2ページ</p></div></div>
+            <div className="report-preview"><FileText size={34}/><div><h3>{lesson.unit}</h3><p>{lesson.school}{lesson.grade}年・{lesson.course||lesson.subject}　／　{reportModes[report.mode]}</p><p className="muted">A4縦・概要2ページ＋全文</p></div></div>
             <ol className="page-list"><li>授業評価結果・各観点の判定・授業の成果</li><li>根拠発言・対話と発問・改善提案・参照資料</li></ol>
             <p className="muted">履歴はこのブラウザーに保存します。文字起こし全文は保存対象外です。評価に含まれる引用、対話例（最大5件）、授業者名は残ります。</p>
             <div className="actions"><button className="secondary" onClick={()=>move(4)}><ArrowLeft size={16}/> 評価へ戻る</button><button className="secondary" onClick={save}><History size={16}/> 履歴を保存</button><button className="primary" onClick={download}><Download size={16}/> PDFをダウンロード</button></div>

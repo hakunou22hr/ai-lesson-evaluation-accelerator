@@ -115,3 +115,7 @@ blockquote{margin:8px 0 0;padding:7px 10px;background:#f2f6fb;border-left:3px so
 .chat-columns{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px}
 .chat-columns>div{min-width:0;background:#f1f6fc;border-radius:8px;padding:10px;overflow-wrap:anywhere}
 @media(max-width:600px){.chat-columns{grid-template-columns:1fr}}
+.long-text{margin-block:6px;line-height:1.6;overflow-wrap:anywhere}
+.long-text>div{white-space:pre-wrap}
+.long-text-preview{max-height:16em;overflow:hidden}
+.long-text .text-button{color:#174d81;text-decoration:underline;padding:4px 0;min-height:32px}

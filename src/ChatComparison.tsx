@@ -1,3 +1,4 @@
+import {ReadMore} from './ReadMore'
 import {useState} from 'react'
 import {assessmentStatus,sections,type Focus,type Lesson,type Report,type Rubric,type Turn} from './domain'
 import {chatFields,chatRequest,readChatResult,type ChatResult} from './chatgpt'
@@ -38,8 +39,8 @@ export function ChatComparison({lesson,rubrics,focus,turns,baseline,current,appl
         return <article className="exchange" key={group+index}>
           <h4>{item.name}</h4>
           <div className="chat-columns">
-            <div><b>端末内分析 · {assessmentStatus(local)}</b><p>{local.reason}</p><p>{local.improvement}</p>{local.evidence.map((entry,i)=><blockquote key={i}>行{entry.id} {entry.time}「{entry.quote}」</blockquote>)}</div>
-            <div><b>ChatGPTの評価案 · {assessmentStatus(item)}</b><p>{item.reason}</p>{item.missing&&<p>確認したい資料　{item.missing}</p>}<p>次の問い返し　{item.improvement}</p>
+            <div><b>端末内分析 · {assessmentStatus(local)}</b><ReadMore text={local.reason}/><ReadMore text={local.improvement}/>{local.evidence.map((entry,i)=><blockquote key={i}>行{entry.id} {entry.time}「{entry.quote}」</blockquote>)}</div>
+            <div><b>ChatGPTの評価案 · {assessmentStatus(item)}</b><ReadMore text={item.reason}/>{item.missing&&<ReadMore text={`確認したい資料　${item.missing}`}/>}<ReadMore text={`次の問い返し　${item.improvement}`}/>
               {item.evidence.map((entry,i)=><blockquote key={i}>行{entry.id} {entry.time}「{entry.quote}」</blockquote>)}</div>
           </div>
           <div className="actions">
@@ -49,7 +50,7 @@ export function ChatComparison({lesson,rubrics,focus,turns,baseline,current,appl
         </article>
       }))}
       <details><summary>授業全体の所見・改善案を比較</summary>
-        {chatFields.map(field=><div className="exchange" key={field}><h4>{sections[field]}</h4><div className="chat-columns"><div><b>端末内分析</b><p>{baseline[field]}</p></div><div><b>ChatGPTの評価案</b><p>{candidate[field]}</p></div></div></div>)}
+        {chatFields.map(field=><div className="exchange" key={field}><h4>{sections[field]}</h4><div className="chat-columns"><div><b>端末内分析</b><ReadMore text={baseline[field]}/></div><div><b>ChatGPTの評価案</b><ReadMore text={candidate[field]}/></div></div></div>)}
         <button type="button" className="secondary" onClick={()=>{const source=current.chatNotes?baseline:candidate;apply({...current,...Object.fromEntries(chatFields.map(field=>[field,source[field]])),chatNotes:!current.chatNotes})}}>{current.chatNotes?'端末内の全体所見に戻す':'全体所見を採用'}</button>
       </details>
     </>}

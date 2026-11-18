@@ -9,6 +9,17 @@ const grades = {
   確認待ち:{ink:'#654b10',fill:'#fff5d8',bar:'#a4822c'},
   根拠不足:{ink:'#465366',fill:'#edf0f4',bar:'#728195'},
 }
+function wrapText(ctx:CanvasRenderingContext2D,value:string,width:number) {
+  return value.split(/\r?\n/).flatMap(paragraph=>{
+    const lines:string[]=[]
+    let line=''
+    for(const char of paragraph){
+      if(line&&ctx.measureText(line+char).width>width){lines.push(line);line=char}
+      else line+=char
+    }
+    return [...lines,line]
+  })
+}
 let loaded:Promise<FontFace>|undefined
 function font() {
   loaded ??= new FontFace('Report Japanese',`url(${import.meta.env.BASE_URL}NotoSansCJKjp-Regular.otf)`).load().then(face=>{document.fonts.add(face);return face}).catch(error=>{loaded=undefined;throw error})
@@ -23,6 +34,8 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
   const [{jsPDF}]=await Promise.all([import('jspdf'),font()])
   const pdf=new jsPDF({orientation:'portrait',format:'a4',unit:'mm',compress:true})
   pdf.setProperties({title:'Lesson evaluation report'})
+  const link=(x:number,y:number,width:number,height:number,pageNumber:number)=>
+    pdf.link(x*210/W,y*297/H,width*210/W,height*297/H,{pageNumber})
   function render(number:number) {
     const canvas=document.createElement('canvas')
     canvas.width=W*2;canvas.height=H*2
@@ -34,18 +47,14 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
     const write=(value:string,maxLines=2,size=15,color='#233650',indent=0,width=CONTENT-indent)=>{
       ctx.font=`${size}px "Report Japanese"`
       ctx.fillStyle=color
-      const lines:string[]=[]
-      let line=''
-      for(const char of value.replace(/\s+/g,' ').trim()) {
-        if(ctx.measureText(line+char).width>width) {lines.push(line);line=char}
-        else line+=char
-        if(lines.length===maxLines) break
-      }
-      if(lines.length<maxLines) lines.push(line)
-      else {
-        let last=lines[maxLines-1]
-        while(ctx.measureText(last+'…').width>width) last=last.slice(0,-1)
-        lines[maxLines-1]=last+'…'
+      const wrapped=wrapText(ctx,value.replace(/\s+/g,' ').trim(),width)
+      const lines=wrapped.slice(0,maxLines)
+      if(wrapped.length>maxLines){
+        const label=' 続きを見る'
+        let last=Array.from(lines[maxLines-1])
+        while(last.length&&ctx.measureText(last.join('')+label).width>width) last.pop()
+        lines[maxLines-1]=last.join('')+label
+        link(M+indent,y+(maxLines-1)*(size+7),width,size+7,3)
       }
       for(const text of lines) {
         if(y+size+7>BOTTOM||ctx.measureText(text).width>width) throw Error('PDFの配置検査に失敗しました。')
@@ -194,7 +203,7 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
       if(report.teaching.length){
         heading('授業者が指定した指導上の観点')
         evaluationCards(report.teaching,report.teaching.length>10?3:2,false)
-        if(report.teaching.length>10) write('各観点の理由は分析画面で確認できます。',1,11,'#536d86')
+        if(report.teaching.length>10) write('各観点の理由は末尾の全文で確認できます。',1,11,'#536d86')
       }
       heading('授業全体の成果');write(report.outcomes,3)
     } else {
@@ -224,11 +233,67 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
       }
     }
     ctx.fillStyle='#597087';ctx.font='12px "Report Japanese"'
-    ctx.fillText(`授業研究用　／　${number}・2`,M,H-29)
+    ctx.fillText(`授業研究用　／　概要 ${number}・2`,M,H-29)
+    ctx.fillStyle='#185a9b'
+    ctx.fillText('評価・改善案の全文を開く →',W-M-178,H-29)
+    link(W-M-183,H-36,183,25,3)
     pdf.addImage(canvas,'PNG',0,0,210,297,undefined,'FAST')
     canvas.width=0
   }
   render(1);pdf.addPage();render(2)
-  if(pdf.getNumberOfPages()!==2||pdf.internal.pageSize.getWidth()<209.9||pdf.internal.pageSize.getHeight()<296.9) throw Error('PDFのページ検査に失敗しました。')
+  const appendix=document.createElement('canvas')
+  appendix.width=W*2;appendix.height=H*2
+  const ctx=appendix.getContext('2d')!
+  ctx.scale(2,2);ctx.textBaseline='top'
+  let y=0
+  const flush=()=>pdf.addImage(appendix,'PNG',0,0,210,297,undefined,'FAST')
+  const newPage=()=>{
+    if(y) flush()
+    pdf.addPage()
+    ctx.fillStyle='white';ctx.fillRect(0,0,W,H)
+    ctx.fillStyle='#174d81';ctx.font='24px "Report Japanese"'
+    ctx.fillText('評価・改善案の全文',M,43)
+    ctx.font='12px "Report Japanese"';ctx.fillText('← 概要へ戻る',W-M-96,52)
+    link(W-M-105,46,105,27,1)
+    ctx.fillStyle='#536d86';ctx.fillText(`全文  ${pdf.getNumberOfPages()-2}`,M,H-29)
+    y=92
+  }
+  const detail=(value:string,title=false)=>{
+    const size=title?17:14
+    const style=()=>{
+      ctx.font=`${size}px "Report Japanese"`
+      ctx.fillStyle=title?'#174d81':'#233650'
+    }
+    style()
+    const lines=wrapText(ctx,value,CONTENT)
+    for(const line of lines){
+      if(y+size+7>BOTTOM){newPage();style()}
+      ctx.fillText(line,M,y);y+=size+7
+    }
+  }
+  const block=(title:string,body:string[])=>{
+    if(y+84>BOTTOM) newPage()
+    detail(title,true)
+    for(const paragraph of body) if(paragraph) detail(paragraph)
+    y+=12
+  }
+  newPage()
+  block('授業情報',[
+    `${lesson.school}${lesson.grade}年｜${lesson.course||lesson.subject}｜${lesson.unit}`,
+    '本時の目標　'+lesson.goal,
+  ])
+  for(const [group,items] of [['学習状況',report.learning],['指導上の観点',report.teaching]] as const){
+    for(const item of items) block(`${group}｜${item.name}｜${assessmentStatus(item)}`,[
+      '評価理由　'+item.reason,
+      item.missing?'確認したい資料　'+item.missing:'',
+      '改善提案・問い返し　'+item.improvement,
+      ...item.evidence.map(entry=>`根拠 行${entry.id} ${entry.time}「${entry.quote}」`),
+    ])
+  }
+  for(const key of Object.keys(sections) as (keyof typeof sections)[]) block(sections[key],[report[key]])
+  block('評価規準の出典',sources.map(source=>`${source.name}（${source.year}年） ${source.section}\n${source.url}`))
+  flush()
+  appendix.width=0
+  if(pdf.getNumberOfPages()<3||pdf.internal.pageSize.getWidth()<209.9||pdf.internal.pageSize.getHeight()<296.9) throw Error('PDFのページ検査に失敗しました。')
   return pdf
 }
