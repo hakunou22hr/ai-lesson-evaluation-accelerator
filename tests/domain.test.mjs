@@ -155,3 +155,23 @@ test('ChatGPTの評価案を原文・時刻・観点と照合する',async()=>{
   input.learning[0].evidence.pop()
   assert.throws(()=>readChatResult(JSON.stringify(input),focus,turns),/根拠が不足/)
 })
+
+test('ヘッダーのないZoom抜粋から長い話者ラベルと発言を取り込む',async()=>{
+  const {zoomTranscript,summarizeDialogue}=await import('../src/dialogue.ts')
+  const extracted=zoomTranscript('146\r\n01:47:24.550 --> 01:47:29.100\r\nSpeaker 1 (remote-classroom-instructor): これ何でそう思いましたか？\r\n\r\n147\r\n01:47:29.830 --> 01:47:31.000\r\nSpeaker 3 (local-classroom-participant): ただ入れていって支えてるだけだから。')
+  const turns=parseTurns(extracted)
+  assert.deepEqual(turns.map(t=>t.speaker),['Speaker 1 (remote-classroom-instructor)','Speaker 3 (local-classroom-participant)'])
+  assert.equal(turns[1].text,'ただ入れていって支えてるだけだから。')
+  assert.equal(summarizeDialogue(turns).responses,0)
+  const assigned=turns.map((t,i)=>({...t,speaker:i?'生徒1':'教師'}))
+  const scene=summarizeDialogue(assigned).scenes[0]
+  assert.equal(scene.seconds,5.28)
+  assert.equal(scene.response.time,'01:47:29.830')
+  assert.equal(zoomTranscript('通常の発言\n教師：ここを見てください。'),'通常の発言\n教師：ここを見てください。')
+})
+
+test('物理基礎の浮力では測定値を使う規準を提示する',()=>{
+  const rules=drafts({...math,subject:'理科',course:'物理基礎',unit:'圧力',goal:'浮力を理解'})
+  assert.match(rules[1].B,/二つの測定結果を比較/)
+  assert.match(rules[1].C,/本人の説明も記録/)
+})

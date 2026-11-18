@@ -81,9 +81,15 @@ export function summarizeDialogue(turns:Turn[]):DialogueSummary {
 }
 
 export function zoomTranscript(value:string) {
-  if(!/^\s*(?:\uFEFF)?WEBVTT\b/.test(value)) return value
   const stamp=/^(\d{2,}:\d{2}(?::\d{2})?[.,]\d{3})\s+-->\s+\d{2,}:\d{2}(?::\d{2})?[.,]\d{3}(?:\s|$)/
-  return value.split(/\r?\n[\t ]*\r?\n/).flatMap(block=>{
+  const blocks=value.replace(/^\uFEFF/,'').trimStart().split(/\r?\n[\t ]*\r?\n/)
+  const header=/^WEBVTT\b/.test(blocks[0])
+  const isCue=(block:string)=>{
+    const [first,second]=block.split(/\r?\n/,2)
+    return stamp.test(first.trim())||(/^\d+$/.test(first.trim())&&stamp.test(second?.trim()||''))
+  }
+  if(!header&&!blocks.some(isCue)) return value
+  return blocks.flatMap(block=>{
     const rows=block.split(/\r?\n/)
     if(/^(?:NOTE(?:\s|$)|STYLE\s*$|REGION\s*$)/.test(rows[0])) return []
     const index=rows.findIndex(row=>stamp.test(row.trim()))

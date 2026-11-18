@@ -1,6 +1,6 @@
 import {ReadMore} from './ReadMore'
 import {ChatComparison} from './ChatComparison'
-import {dialogueObservation,relevantScene,type DialogueScene,reactionLabels,summarizeDialogue,zoomTranscript} from './dialogue'
+import {teacherLabel,studentLabel,dialogueObservation,relevantScene,type DialogueScene,reactionLabels,summarizeDialogue,zoomTranscript} from './dialogue'
 import {useState,type ReactNode} from 'react'
 import {createRoot} from 'react-dom/client'
 import {Activity,ArrowLeft,ArrowRight,BookOpen,Check,ChevronRight,ClipboardList,Download,FileText,FlaskConical,History,Settings,ShieldCheck,Sparkles,Upload} from 'lucide-react'
@@ -196,12 +196,13 @@ function App(){
             <Field name="文字起こしテキスト"><textarea className="transcript" value={text} onChange={e=>changeTranscript(e.target.value)} placeholder="[00:02:10] 教師：授業の発言を貼り付けてください。"/></Field>
             <p className="stats">{text.length.toLocaleString()}文字 ／ {turns.length.toLocaleString()}行 ／ 時刻{turns.some(t=>t.time)?'あり':'なし'} ／ 話者ラベル{turns.some(t=>t.speaker)?'あり':'なし'}</p>
             <Field name="匿名化する名前（任意・読点または改行区切り）"><input value={names} onChange={e=>{setNames(e.target.value);setChecked(false)}} placeholder="例：山田太郎、鈴木花子"/></Field>
-            <button className="secondary" onClick={()=>{const next=anonymize(text,names);const oldTurns=turns;changeTranscript(next);setTurns(parseTurns(next).map((turn,i)=>({...turn,speaker:anonymize(oldTurns[i]?.speaker||turn.speaker,names)})));setNotice(next===text?'自動検出による置換箇所はありません。本文を目視で確認してください。':'検出・指定した箇所を置換しました。本文を目視で確認してください。')}}><ShieldCheck size={16}/> 匿名化を適用</button>
+            <button className="secondary" onClick={()=>{const next=anonymize(text,names);const oldTurns=turns;changeTranscript(next);setTurns(parseTurns(next).map((turn,i)=>({...turn,speaker:anonymize(oldTurns[i]?.speaker??turn.speaker,names)})));setNotice(next===text?'自動検出による置換箇所はありません。本文を目視で確認してください。':'検出・指定した箇所を置換しました。本文を目視で確認してください。')}}><ShieldCheck size={16}/> 匿名化を適用</button>
+            {turns.some(turn=>turn.speaker&&!teacherLabel.test(turn.speaker.trim())&&!studentLabel.test(turn.speaker.trim()))&&<p className="alert">役割が未設定の話者名があります。下で「教師」「生徒」を割り当てると、発問と応答の候補を抽出できます。</p>}
             {turns.some(turn=>turn.speaker)&&<details className="source">
               <summary>Zoomの話者名をまとめて変更</summary>
               <Field name="元の話者名"><select value={speakerToMap} onChange={e=>setSpeakerToMap(e.target.value)}><option value="">選択してください</option>{[...new Set(turns.map(turn=>turn.speaker).filter(Boolean))].map(speaker=><option key={speaker}>{speaker}</option>)}</select></Field>
               <div className="choices">{['教師','生徒','話者不明'].map(role=><button type="button" className="secondary" disabled={!speakerToMap} key={role} onClick={()=>{
-                const assigned=role==='生徒'?`生徒${1+Math.max(0,...turns.map(turn=>Number(/^生徒(\d+)$/.exec(turn.speaker)?.[1]||0)))}`:role==='話者不明'?'':role
+                const assigned=role==='生徒'?`生徒${1+turns.reduce((max,turn)=>Math.max(max,Number(/^生徒(\d+)$/.exec(turn.speaker)?.[1]||0)),0)}`:role==='話者不明'?'':role
                 setTurns(previous=>previous.map(turn=>turn.speaker===speakerToMap?{...turn,speaker:assigned}:turn))
                 setSpeakerToMap('');setChecked(false);setReport(null);setOriginal(null)
               }}>{role}に変更</button>)}</div>

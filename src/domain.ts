@@ -68,6 +68,10 @@ export function drafts(l:Lesson): Rubric[] {
     [thinking,'複数の根拠を関連付けて説明し、条件が変わる場合も検討する','結論と根拠の対応が示せていない','結果の比較と説明','発言と記述・成果物','「どのデータがその説明を支えるか」と尋ねる'],
     ['自分の取り組みを振り返り、理解を進めるために方法を見直す','見直しの理由を明示し、次の課題でも自ら方法を調整する','支援を受けても方法の見直しが記録から確認できない','単元内の複数回の振り返り','振り返りの変化・再試行の記録','取り組みの前後を比較する振り返り欄を設ける'],
   ]
+  if(l.school==='高等学校'&&l.course==='物理基礎'&&/浮力/.test(l.unit+' '+l.goal)&&(!/密度/.test(l.goal)||/体積/.test(l.goal))){
+    items[0]=['はかりの表示を記録し、押しのけた水の体積と浮力に関係する量を用語と単位で区別する','条件と測定値を整理し、はかりの表示の変化を力の向きと関連付けて説明する','記録した測定値や単位を読み分けられない','沈める体積を変える実験','本人の測定記録・ワークシート','表示の単位（g）と力の単位（N）を確認し、一つの条件の値から整理する']
+    items[1]=['同じ液体で沈める体積を変えた二つの測定結果を比較し、押しのけた水の体積が大きいと浮力も大きくなることを説明する','二つの測定結果を根拠に浮力の変化を説明し、まだ試していない浸し方での変化を予測する','比較して説明する機会があり本人の説明も記録されているが、測定結果と浮力の変化が結び付いていない','実験後に同じ生徒が最初の予想を言い直す場面','実験前後の発言と測定値を記したワークシート','どちらの条件で、はかりの表示がどれだけ変わったかを尋ねる']
+  }
   return items.map(([lesson,A,C,scene,method,support],i)=>({name:perspectives[i],unit:`「${l.unit}」の学習を通して、${lesson}。`,lesson,A,B:lesson,C,scene,method,support}))
 }
 export type Focus = {name:string; A:string; B:string; C:string}
@@ -82,7 +86,8 @@ export function parseTurns(text:string): Turn[] {
   return text.split(/\r?\n/).map(line=>line.trim()).filter(Boolean).map((line,id)=>{
     const time = /^(?:\[|［|【|\()?((?:\d{1,2}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?)(?:\]|］|】|\))?\s*/.exec(line)
     const rest = time ? line.slice(time[0].length) : line
-    const speaker = /^([^:：]{1,24})[:：]\s*(.+)$/.exec(rest)
+    const zoomSpeaker = time&&/^(Speaker\s+\d+\s*\([^)\r\n]{1,160}\))[:：]\s*(.+)$/i.exec(rest)
+    const speaker = zoomSpeaker || /^([^:：]{1,24})[:：]\s*(.+)$/.exec(rest)
     return {id:id+1,time:time?.[1]||'',speaker:speaker?.[1]||'',text:speaker?.[2]||rest||line}
   })
 }
