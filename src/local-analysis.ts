@@ -1,6 +1,6 @@
 import {focusDraft, focuses, perspectives, type Evidence, type Focus, type Item, type Lesson, type Report, type Rubric, type Turn} from './domain.ts'
 
-import {explanationPattern as responseReason,rationalePattern as rationale,studentLabel as student,summarizeDialogue} from './dialogue.ts'
+import {dialogueObservation,relevantScene,explanationPattern as responseReason,rationalePattern as rationale,studentLabel as student,summarizeDialogue} from './dialogue.ts'
 const comparison = /比べ|比較|共通点|相違点|違い|変化/
 const reflection = /振り返|見直|次は|最初は|やり直|考え直/
 const excluded = new Set('単元 授業 本時 目標 学習 必要 自分 用語 手順 課題 対応 知識 技能 判断 表現 記録 方法 支援 生徒 児童 教師 状況 確認 成果 具体 条件 場面 内容 説明 理由 使用 活用 できる でき する させる 使える 用いる 用い 振り返る'.split(' '))
@@ -53,7 +53,8 @@ export function localReport(lesson:Lesson,rubrics:Rubric[],focus:Focus[],turns:T
       candidates(learners,terms([rubric?.lesson,rubric?.B,lesson.goal,lesson.unit].filter(Boolean).join('。')),index===1?responseReason:undefined)
     const reason=index===2?'継続的な取組や学習方法の調整は、複数の授業での記録が必要です。':
       relevant.length?'規準や目標の語句を含む発言候補があります。発言の正確さと規準を満たすかは、成果物や活動記録と照合してください。':'評価規準に照合できる児童・生徒の発言候補を確認できませんでした。'
-    return unknown(name,reason,rubric?.support||'ワークシートや活動記録を確認してください。',relevant)
+    const scene=relevantScene(conversation.scenes,relevant)
+    return unknown(name,reason+(scene?' '+dialogueObservation(scene):''),rubric?.support||'ワークシートや活動記録を確認してください。',relevant)
   })
   const teaching=focus.map(row=>{
     if(matched&&row.name===focuses[1]&&row.B===focusDraft([row.name])[0].B) return {

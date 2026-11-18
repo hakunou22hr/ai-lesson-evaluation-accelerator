@@ -112,3 +112,23 @@ test('話者不明を挟んだ場合や逆順の時刻を計測対象にしな�
   assert.equal(result.timed,0)
   assert.equal(result.median,undefined)
 })
+
+test('確認待ちと根拠不足を区別し、次の応答を原文付きで関連づける',async()=>{
+  const {assessmentStatus}=await import('../src/domain.ts')
+  const {summarizeDialogue,dialogueObservation,relevantScene}=await import('../src/dialogue.ts')
+  const lines='[00:01] 教師：どうなりますか？\n[00:05] 生徒A：電流が増えます。\n[00:08] 教師：どの測定値を根拠にしましたか？\n[00:12] 生徒A：電圧が倍で電流も倍だったからです。'
+  const turns=parseTurns(lines)
+  const report=localReport(demo,drafts(demo),[],turns)
+  const scene=report.conversation.scenes[0]
+  assert.equal(scene.sameLearner,true)
+  assert.equal(scene.followUpResponse.time,'00:12')
+  assert.equal(scene.followUpResponse.quote,turns[3].text)
+  assert.match(dialogueObservation(scene),/同じ話者ラベル/)
+  assert.equal(relevantScene(report.conversation.scenes,[scene.followUpResponse]),scene)
+  assert.equal(assessmentStatus(report.learning[0]),'確認待ち')
+  assert.equal(assessmentStatus(report.learning[2]),'根拠不足')
+  const other=summarizeDialogue(parseTurns(lines.replace('生徒A：電圧','生徒B：電圧'))).scenes[0]
+  assert.equal(other.sameLearner,false)
+  const noName=summarizeDialogue(parseTurns(lines.replaceAll('生徒A','生徒'))).scenes[0]
+  assert.equal(noName.sameLearner,false)
+})

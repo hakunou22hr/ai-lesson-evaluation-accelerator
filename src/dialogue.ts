@@ -14,7 +14,7 @@ const signals = [
 ] as const
 export type ReactionKind = typeof signals[number][1] | 'other'
 export const reactionLabels:Record<ReactionKind,string> = Object.fromEntries([...signals.map(([label,key])=>[key,label]),['other','その他の発言']]) as Record<ReactionKind,string>
-export type DialogueScene = {kind:'question'|'instruction'; prompt:Evidence; response?:Evidence; seconds?:number; reaction?:ReactionKind; followUp?:Evidence}
+export type DialogueScene = {kind:'question'|'instruction'; prompt:Evidence; response?:Evidence; seconds?:number; reaction?:ReactionKind; followUp?:Evidence; followUpResponse?:Evidence; followUpReaction?:ReactionKind; sameLearner?:boolean}
 export type DialogueSummary = {questions:number;instructions:number;responses:number;timed:number;median?:number;bins:number[];signals:Record<ReactionKind,number>;scenes:DialogueScene[]}
 
 function seconds(time:string) {
@@ -34,6 +34,9 @@ export function summarizeDialogue(turns:Turn[]):DialogueSummary {
   const labels:DialogueSummary['signals']={clarification:0,explanation:0,revision:0,acknowledgment:0,other:0}
   const delays:number[]=[]
   let pending:DialogueScene|undefined
+  let previous:DialogueScene|undefined
+  let responder=''
+  let previousResponder=''
   let questions=0
   let instructions=0
   let responses=0
@@ -41,7 +44,10 @@ export function summarizeDialogue(turns:Turn[]):DialogueSummary {
     const speaker=turn.speaker.trim()
     if(teacherLabel.test(speaker)){
       const kind=questionPattern.test(turn.text)?'question':instruction.test(turn.text)?'instruction':undefined
-      if(pending?.response&&kind==='question') pending.followUp=evidence(turn)
+      previous=pending?.response&&kind==='question'?pending:undefined
+      previousResponder=responder
+      if(previous) previous.followUp=evidence(turn)
+      responder=''
       pending=kind?{kind,prompt:evidence(turn)}:undefined
       if(!pending) continue
       scenes.push(pending)
@@ -50,6 +56,12 @@ export function summarizeDialogue(turns:Turn[]):DialogueSummary {
     }else if(studentLabel.test(speaker)){
       if(!pending||pending.response) continue
       pending.response=evidence(turn)
+      responder=speaker.normalize('NFKC').toLowerCase()
+      if(previous){
+        previous.followUpResponse=pending.response
+        previous.followUpReaction=reaction(turn.text)
+        previous.sameLearner=previousResponder===responder&&!/^(?:児童|生徒|学生|student|pupil)(?:\s*\[匿名\])?$/.test(responder)
+      }
       pending.reaction=reaction(turn.text)
       labels[pending.reaction]++
       responses++
@@ -58,7 +70,7 @@ export function summarizeDialogue(turns:Turn[]):DialogueSummary {
         pending.seconds=Math.round((to-from)*1000)/1000
         delays.push(pending.seconds)
       }
-    }else pending=undefined
+    }else {pending=undefined;previous=undefined;responder=''}
   }
   delays.sort((a,b)=>a-b)
   const mid=Math.floor(delays.length/2)
@@ -80,4 +92,21 @@ export function zoomTranscript(value:string) {
     const text=rows.slice(index+1).join('\n').trim().replace(/(?<=[ぁ-龯])\n(?=[ぁ-龯])/g,'').replaceAll('\n',' ').replace(/^<v(?:\.[^ >]+)*\s+([^>]+)>/,'$1：').replace(/<\/?(?:v|c|i|b|u|lang|ruby|rt)\b[^>]*>/g,'')
     return text?[`[${start}] ${text}`]:[]
   }).join('\n')
+}
+
+export function dialogueObservation(scene:DialogueScene) {
+  if(scene.followUpResponse){
+    const later=reactionLabels[scene.followUpReaction||'other']
+    if(scene.sameLearner&&scene.reaction!=='explanation'&&scene.followUpReaction==='explanation')
+      return '同じ話者ラベルの応答に、次の発問の後で理由を示す表現が現れました。説明が規準を満たすか確認してください。'
+    return `次の発問後にも応答があり、${later}の候補が見られます。${scene.sameLearner?'前後の説明を照合してください。':'同じ児童・生徒の変化かは確認できません。'}`
+  }
+  if(scene.response) return `働きかけの後に「${reactionLabels[scene.reaction||'other']}」に当たる応答候補があります。`
+  return '対応する応答候補は記録から確認できませんでした。'
+}
+
+export function relevantScene(scenes:DialogueScene[],items:Evidence[]) {
+  const ids=new Set(items.map(item=>item.id))
+  const related=(s:DialogueScene)=>[s.prompt,s.response,s.followUp,s.followUpResponse].some(turn=>turn&&ids.has(turn.id))
+  return scenes.find(s=>s.followUpResponse&&related(s))||scenes.find(related)
 }

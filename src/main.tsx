@@ -1,8 +1,8 @@
-import {reactionLabels,summarizeDialogue,zoomTranscript} from './dialogue'
+import {dialogueObservation,relevantScene,type DialogueScene,reactionLabels,summarizeDialogue,zoomTranscript} from './dialogue'
 import {useState,type ReactNode} from 'react'
 import {createRoot} from 'react-dom/client'
 import {Activity,ArrowLeft,ArrowRight,BookOpen,Check,ChevronRight,ClipboardList,Download,FileText,FlaskConical,History,Settings,ShieldCheck,Sparkles,Upload} from 'lucide-react'
-import {anonymize,chunks,courses,demo,drafts,empty,evidence,fields,focusDraft,focuses,math,normalizeItem,parseTurns,perspectives,reportModes,sample,schools,sections,sources,type Focus,type Grade,type Item,type Lesson,type Report,type Rubric,type Turn} from './domain'
+import {assessmentStatus,anonymize,chunks,courses,demo,drafts,empty,evidence,fields,focusDraft,focuses,math,normalizeItem,parseTurns,perspectives,reportModes,sample,schools,sections,sources,type Focus,type Grade,type Item,type Lesson,type Report,type Rubric,type Turn} from './domain'
 import {ai,endpoint} from './ai'
 import {localReport} from './local-analysis'
 import {readFile} from './files'
@@ -13,6 +13,11 @@ const steps=['授業情報','評価規準','追加観点','文字起こし','授
 const titles=['授業情報を入力','評価規準を確認','重点的に見たい観点を追加','授業の文字起こしを読み込む','授業分析と評価','評価レポートを出力']
 const descriptions=['授業の基本情報と本時の目標を入力してください。入力内容をもとに評価規準の案を作成します。','3観点の規準案を授業に合わせて修正し、承認してください。','授業者の指導方法について、今回の振り返りで重視する項目を選べます。','授業の発言記録を読み込み、時刻・話者・匿名化の内容を確認します。','記録と確定した評価規準を照合します。結果は確認・修正できます。','評価結果と改善提案をA4縦・2ページのPDFにまとめます。']
 const grades:Grade[]=['A','B','C','判定不能']
+function DialogueExcerpt({scene}:{scene:DialogueScene}) {
+  const lines=[['教師の指示・発問',scene.prompt],['最初の応答',scene.response],['教師の次の発問',scene.followUp],['次の応答',scene.followUpResponse]] as const
+  return <><p><b>暫定所見</b>　{dialogueObservation(scene)}</p>
+    {lines.map(([label,entry])=>entry&&<blockquote key={label}>{label}　行{entry.id} {entry.time}「{entry.quote}」</blockquote>)}</>
+}
 const rubricKeys=Object.keys(fields) as (keyof typeof fields)[]
 type Saved={id:string; date:string; lesson:Lesson;rubrics:Rubric[];focus:Focus[];original:Report;report:Report}
 function load<T,>(key:string,fallback:T):T {try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch{return fallback}}
@@ -126,7 +131,7 @@ function App(){
   const save=()=>run('履歴を保存中…',()=>{
     if(!report) return
     const id=recordId||crypto.randomUUID()
-    const forHistory=(value:Report):Report=>value.conversation?{...value,conversation:{...value.conversation,scenes:value.conversation.scenes.filter(scene=>scene.response).slice(0,5)}}:value
+    const forHistory=(value:Report):Report=>value.conversation?{...value,conversation:{...value.conversation,scenes:value.conversation.scenes.filter(scene=>scene.response).sort((a,b)=>Number(!!b.followUpResponse)-Number(!!a.followUpResponse)).slice(0,5)}}:value
     const entry:Saved={id,date:new Date().toISOString(),lesson,rubrics,focus,original:forHistory(original||report),report:forHistory(report)}
     const next=[entry,...records.filter(r=>r.id!==id)].slice(0,30)
     setLocal('lesson-history-v1',next);setRecords(next);setRecordId(id);setNotice('評価履歴をこのブラウザーに保存しました。')
@@ -207,6 +212,7 @@ function App(){
             <div className="actions analysis-actions"><button className="primary" disabled={!turns.length} onClick={analyze}><Sparkles size={16}/> {mode==='ai'?'AI授業分析を開始':'端末内分析を開始'}</button>{report&&<button className="secondary" onClick={()=>setEditing(!editing)}>{editing?'編集を閉じる':'評価を修正'}</button>}</div>
             {report&&<>
               <p className="muted">{reportModes[report.mode]}結果。授業研究用の所見です。{report.mode==='local'&&' 発言候補と参考判定を確認してから、必要に応じて評価を修正してください。'}</p>
+              <p className="muted">確認待ち：発言候補あり。根拠不足：規準と照合できる発言候補なし。</p>
               {report.conversation&&<section className="result conversation">
                 <h3>教師の働きかけと児童・生徒の反応</h3>
                 <div className="conversation-totals">
@@ -224,14 +230,17 @@ function App(){
                     <blockquote>行{scene.prompt.id} {scene.prompt.time}「{scene.prompt.quote}」</blockquote>
                     {scene.response?<><b>児童・生徒の反応候補 · {reactionLabels[scene.reaction||'other']}{scene.seconds===undefined?'':` · ${scene.seconds}秒`}</b><blockquote>行{scene.response.id} {scene.response.time}「{scene.response.quote}」</blockquote></>:<p>対応する応答は記録から確認できませんでした。</p>}
                     {scene.followUp&&<blockquote>続く発問　行{scene.followUp.id} {scene.followUp.time}「{scene.followUp.quote}」</blockquote>}
+                    {scene.followUpResponse&&<blockquote>次の応答　行{scene.followUpResponse.id} {scene.followUpResponse.time}「{scene.followUpResponse.quote}」</blockquote>}
+                    <p><b>暫定所見</b>　{dialogueObservation(scene)}</p>
                   </article>)}
                 </details>
               </section>}
               {(['learning','teaching'] as const).map(group=><section key={group}><h3>{group==='learning'?'3観点に関連する学習状況':'授業者が指定した指導上の観点'}</h3>
                 {!report[group].length&&<p>追加観点はありません。</p>}
-                {report[group].map((item,i)=><article className="result" key={item.name}><h4><span className={'grade '+(grades.indexOf(item.grade)<3?item.grade:'unknown')}>{item.grade}</span>{item.name}</h4>
+                {report[group].map((item,i)=>{const status=assessmentStatus(item);const scene=relevantScene(report.conversation?.scenes||[],item.evidence);return <article className="result" key={item.name}><h4><span className={'grade '+(status==='確認待ち'?'review':status==='根拠不足'?'unknown':status)}>{status}</span>{item.name}</h4>
                 {editing?<><Field name="判定"><select value={item.grade} onChange={e=>editItem(group,i,{grade:e.target.value as Grade})}>{grades.map(g=><option key={g}>{g}</option>)}</select></Field><Field name="評価理由"><textarea value={item.reason} onChange={e=>editItem(group,i,{reason:e.target.value})}/></Field><Field name="改善提案"><textarea value={item.improvement} onChange={e=>editItem(group,i,{improvement:e.target.value})}/></Field></>:<><p>{item.reason}</p><p><b>改善提案</b>　{item.improvement}</p></>}
-                {item.evidence.map(e=><blockquote key={e.id+e.quote}>行{e.id} {e.time}「{e.quote}」</blockquote>)}</article>)}</section>)}
+                {item.evidence.map(e=><blockquote key={e.id+e.quote}>行{e.id} {e.time}「{e.quote}」</blockquote>)}
+                {scene&&<details><summary>この観点の対話の流れ</summary><DialogueExcerpt scene={scene}/></details>}</article>})}</section>)}
               {(Object.keys(sections) as (keyof typeof sections)[]).map(field=><article className="result" key={field}>{editing?<Field name={sections[field]}><textarea value={report[field]} onChange={e=>setReport({...report,[field]:e.target.value})}/></Field>:<><h4>{sections[field]}</h4><p>{report[field]}</p></>}</article>)}
             </>}
             <div className="actions"><button className="secondary" onClick={()=>move(3)}><ArrowLeft size={16}/> 戻る</button><button className="primary" disabled={!report} onClick={()=>move(5)}>レポートへ進む <ArrowRight size={16}/></button></div>

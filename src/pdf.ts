@@ -1,12 +1,13 @@
-import {reactionLabels} from './dialogue'
+import {dialogueObservation,reactionLabels} from './dialogue'
 import type {Lesson,Report,Source,Item} from './domain'
-import {reportModes,sections} from './domain'
+import {assessmentStatus,reportModes,sections} from './domain'
 const W=794,H=1123,M=47,BOTTOM=1055,CONTENT=W-2*M
 const grades = {
   A:{ink:'#155b49',fill:'#e6f4ed',bar:'#31866d'},
   B:{ink:'#184f87',fill:'#e8f1fd',bar:'#3879b8'},
   C:{ink:'#863e12',fill:'#fff0df',bar:'#b86c35'},
-  判定不能:{ink:'#465366',fill:'#edf0f4',bar:'#728195'},
+  確認待ち:{ink:'#654b10',fill:'#fff5d8',bar:'#a4822c'},
+  根拠不足:{ink:'#465366',fill:'#edf0f4',bar:'#728195'},
 }
 let loaded:Promise<FontFace>|undefined
 function font() {
@@ -62,8 +63,8 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
       const items=[...report.learning,...report.teaching]
       if(!items.length) return
       heading('判定の内訳')
-      const keys=Object.keys(grades) as Item['grade'][]
-      const counts=keys.map(grade=>items.filter(item=>item.grade===grade).length)
+      const keys=Object.keys(grades) as (keyof typeof grades)[]
+      const counts=keys.map(grade=>items.filter(item=>assessmentStatus(item)===grade).length)
       let x=M
       counts.forEach((count,index)=>{
         if(!count) return
@@ -74,7 +75,7 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
       })
       y+=20
       keys.forEach((grade,index)=>{
-        const x=M+index*175
+        const x=M+index*140
         ctx.fillStyle=grades[grade].bar;ctx.fillRect(x,y+5,10,10)
         ctx.fillStyle=grades[grade].ink;ctx.font='13px "Report Japanese"'
         ctx.fillText(`${grade}　${counts[index]}件`,x+16,y)
@@ -89,11 +90,12 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
         if(i&&i%columns===0) top+=height+gap
         const x=M+(i%columns)*(width+gap)
         const inset=x-M+12
-        const tone=grades[item.grade]
+        const status=assessmentStatus(item)
+        const tone=grades[status]
         box(x,top,width,height,'#fcfdff')
         box(x+11,top+7,expanded?72:68,21,tone.fill,tone.fill)
         y=top+8
-        write(item.grade,1,12,tone.ink,inset+7,expanded?57:53)
+        write(status,1,12,tone.ink,inset+7,expanded?57:53)
         if(expanded){
           y=top+32
           write(item.name,2,14,'#143956',inset,width-24)
@@ -156,7 +158,8 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
       })
     }
     const flow=()=>{
-      const scene=report.conversation?.scenes.find(value=>value.kind==='instruction'&&value.response)
+      const scene=report.conversation?.scenes.find(value=>value.followUpResponse)
+        ||report.conversation?.scenes.find(value=>value.kind==='instruction'&&value.response)
         ||report.conversation?.scenes.find(value=>value.response)
       if(!scene?.response) return
       heading('対話の流れ｜振り返る場面')
@@ -171,6 +174,11 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
       y+=39
       write(`行${scene.prompt.id} ${scene.prompt.time}「${scene.prompt.quote}」`,1,13)
       write(`行${scene.response.id} ${scene.response.time}（${detail}）「${scene.response.quote}」`,1,13)
+      if(scene.followUp&&scene.followUpResponse){
+        write(`教師の次の発問  行${scene.followUp.id} ${scene.followUp.time}「${scene.followUp.quote}」`,1,12)
+        write(`次の応答  行${scene.followUpResponse.id} ${scene.followUpResponse.time}「${scene.followUpResponse.quote}」`,1,12)
+        write(dialogueObservation(scene),1,11,'#536d86')
+      }
     }
     write('AI授業評価 Accelerator',1,14,'#396588')
     y+=8
@@ -192,10 +200,13 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
     } else {
       chart()
       flow()
-      heading('根拠となる重要な発言')
+      const completeFlow=report.conversation?.scenes.some(scene=>scene.followUpResponse)
       const quotes=[...new Map([...report.learning,...report.teaching].flatMap(i=>i.evidence).map(e=>[e.id,e])).values()]
-      if(!quotes.length) write('評価に使える根拠発言はありません。',1)
-      quotes.slice(0,report.conversation?2:4).forEach(e=>write(`行${e.id}${e.time?' '+e.time:''} 「${e.quote}」`,2,13))
+      if(!completeFlow){
+        heading('根拠となる重要な発言')
+        if(!quotes.length) write('評価に使える根拠発言はありません。',1)
+        quotes.slice(0,report.conversation?2:4).forEach(e=>write(`行${e.id}${e.time?' '+e.time:''} 「${e.quote}」`,2,13))
+      }
       heading('発問と応答の概要')
       write(report.questions,1,12)
       write(report.dialogue,1,12)
@@ -204,8 +215,7 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
       heading(sections.next);write(report.next,2,13)
       heading('自己評価メモ')
       noteCards([['残したい働きかけ','________________________________'],['次時に変える指示・問い','________________________________']],62)
-      heading('評価上の留意事項')
-      write('授業研究・振り返り用。正式な成績や人事評価の資料として自動確定しない。',2,13)
+      write('授業研究・振り返り用。正式な成績や人事評価の資料として自動確定しない。',1,11)
       heading('評価規準の出典')
       for(const source of sources){
         write(`${source.name}（${source.year}年） ${source.section}`,2,12)
