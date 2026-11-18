@@ -3,7 +3,7 @@ import {perspectives,type Evidence,type Focus,type Item,type Lesson,type Report,
 
 const groups=['learning','teaching'] as const
 export const chatFields=['questions','dialogue','outcomes','improvements','examples','next'] as const
-export type ChatResult=Pick<Report,typeof groups[number]|typeof chatFields[number]>
+export type ChatResult=Pick<Report,typeof chatFields[number]>&Record<typeof groups[number],(Item|undefined)[]>&{missing:string[]; ignored:string[]}
 
 export function chatRequest(lesson:Lesson,rubrics:Rubric[],focus:Focus[],turns:Turn[]) {
   const shape={version:1,learning:rubrics.map(r=>({name:r.name,grade:'判定不能',reason:'',missing:'',improvement:'',evidence:[]})),
@@ -30,12 +30,16 @@ export function readChatResult(raw:string,focus:Focus[],turns:Turn[]):ChatResult
     if(typeof input!=='string'||input.length>600||(!empty&&!input.trim())) throw Error(`${label}は${empty?'':'1〜'}600字以内の文字列で入力してください。`)
     return input.trim()
   }
-  const readGroup=(group:typeof groups[number],names:string[]):Item[]=>{
+  const missing:string[]=[]
+  const ignored:string[]=[]
+  const readGroup=(group:typeof groups[number],names:string[]):(Item|undefined)[]=>{
     const rows:unknown=value[group]
-    if(!Array.isArray(rows)||rows.length!==names.length) throw Error('評価規準と結果の観点数が一致しません。')
+    if(!Array.isArray(rows)||rows.some(row=>typeof row?.name!=='string'||!row.name.trim())) throw Error('評価観点の名前または一覧の形式が不正です。')
+    ignored.push(...new Set(rows.map(row=>row.name).filter(name=>!names.includes(name))))
     return names.map((name,index)=>{
       const matches=rows.filter(row=>row?.name===name)
-      if(matches.length!==1) throw Error(`「${name}」の結果が不足または重複しています。`)
+      if(!matches.length){missing.push(name);return undefined}
+      if(matches.length>1) throw Error(`「${name}」の結果が重複しています。`)
       const row=matches[0]
       if(!['A','B','C','判定不能'].includes(row.grade)||!Array.isArray(row.evidence)||row.evidence.length>4) throw Error(`「${name}」の判定または引用の形式が不正です。`)
       const verified:Evidence[]=row.evidence.map((entry:Partial<Evidence>|null)=>{
@@ -50,5 +54,5 @@ export function readChatResult(raw:string,focus:Focus[],turns:Turn[]):ChatResult
     })
   }
   const result={learning:readGroup('learning',perspectives),teaching:readGroup('teaching',focus.map(f=>f.name))}
-  return {...result,...Object.fromEntries(chatFields.map(field=>[field,requiredText(value[field],field)]))} as ChatResult
+  return {...result,missing,ignored,...Object.fromEntries(chatFields.map(field=>[field,requiredText(value[field],field)]))} as ChatResult
 }

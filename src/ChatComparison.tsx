@@ -24,7 +24,7 @@ export function ChatComparison({lesson,rubrics,focus,turns,baseline,current,appl
   }
   return <section className="result chat-compare">
     <h3>ChatGPTの評価案と比較</h3>
-    <p>この画面で分析依頼をコピーし、ChatGPTに貼り付けます。返されたJSONを下に貼り戻してください。</p>
+    <p>この画面で分析依頼をコピーし、ChatGPTに貼り付けます。返されたJSONを下に貼り戻してください。観点名が一致する項目を比較できます。</p>
     <p className="muted">依頼文には確定した評価規準と文字起こしが含まれます。引用を照合できるよう、氏名などは文字起こし画面で匿名化してからコピーしてください。ChatGPTに貼る前に、所属先のルールに沿って送信内容を確認してください。</p>
     <button type="button" className="secondary" onClick={copy}>ChatGPTへの分析依頼をコピー</button>
     {request&&<label className="field chat-input">分析依頼文<textarea value={request} readOnly onFocus={e=>e.target.select()}/></label>}
@@ -33,7 +33,10 @@ export function ChatComparison({lesson,rubrics,focus,turns,baseline,current,appl
     {message&&<p role="status">{message}</p>}
     {error&&<p className="alert error" role="alert">{error}</p>}
     {candidate&&<>
+      {candidate.missing.length>0&&<p className="alert">結果がないため現在の評価を使用します：{candidate.missing.join('、')}</p>}
+      {candidate.ignored.length>0&&<p className="alert">現在の設定にないため取り込み対象外：{candidate.ignored.join('、')}</p>}
       {(['learning','teaching'] as const).flatMap(group=>candidate[group].map((item,index)=>{
+        if(!item) return null
         const local=baseline[group][index]
         const adopted=current[group][index]?.source==='chatgpt'
         return <article className="exchange" key={group+index}>
