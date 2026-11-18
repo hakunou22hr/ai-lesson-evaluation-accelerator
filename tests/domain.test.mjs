@@ -73,3 +73,42 @@ test('Worker は管理者設定、利用コード、利用上限を強制する'
     assert.equal((await worker.fetch(request,{...env,SCHOOL_LIMIT:{limit:()=>({success:true})}})).status,502)
   }finally{globalThis.fetch=original}
 })
+
+test('Zoom VTTの指示、反応の種類、時刻差を抽出する',async()=>{
+  const {zoomTranscript,summarizeDialogue}=await import('../src/dialogue.ts')
+  const text=zoomTranscript(`WEBVTT
+
+1
+00:00:10.100 --> 00:00:12.000
+<v 教師>理由を書いて
+ください。</v>
+
+2
+00:00:14.500 --> 00:00:15.300
+生徒A: どう書けばいいですか？
+
+3
+00:00:17.000 --> 00:00:19.000
+教師: なぜ同じだと思いましたか？
+
+4
+00:00:25.000 --> 00:00:28.000
+生徒A: 電圧を倍にすると電流も倍になったからです。
+`)
+  const result=summarizeDialogue(parseTurns(text))
+  assert.equal(result.instructions,1)
+  assert.equal(result.questions,1)
+  assert.equal(result.responses,2)
+  assert.deepEqual(result.bins,[1,1,0])
+  assert.equal(result.median,6.2)
+  assert.equal(result.scenes[0].reaction,'clarification')
+  assert.equal(result.scenes[1].reaction,'explanation')
+  assert.equal(result.scenes[0].followUp.time,'00:00:17.000')
+})
+test('話者不明を挟んだ場合や逆順の時刻を計測対象にしない',async()=>{
+  const {summarizeDialogue}=await import('../src/dialogue.ts')
+  const result=summarizeDialogue(parseTurns('[00:10] 教師：考えてください。\n話者不明の発言\n[00:15] 生徒：はい。\n[00:20] 教師：なぜですか？\n[00:19] 生徒：理由は電圧です。'))
+  assert.equal(result.responses,1)
+  assert.equal(result.timed,0)
+  assert.equal(result.median,undefined)
+})

@@ -1,3 +1,4 @@
+import type {DialogueSummary} from './dialogue.ts'
 export const schools = {
   小学校: ['国語','社会','算数','理科','生活','音楽','図画工作','家庭','体育','外国語'],
   中学校: ['国語','社会','数学','理科','音楽','美術','保健体育','技術・家庭','外国語'],
@@ -107,7 +108,7 @@ export function chunks(turns:Turn[], limit=10000): Turn[][] {
 export type Grade = 'A'|'B'|'C'|'判定不能'
 export type Evidence = {id:number; quote:string; time:string}
 export type Item = {name:string; grade:Grade; reason:string; improvement:string; evidence:Evidence[]}
-export type Report = {learning:Item[]; teaching:Item[]; questions:string; dialogue:string; outcomes:string; improvements:string; examples:string; next:string; mode:'demo'|'local'|'ai'}
+export type Report = {learning:Item[]; teaching:Item[]; questions:string; dialogue:string; outcomes:string; improvements:string; examples:string; next:string; mode:'demo'|'local'|'ai'; conversation?: DialogueSummary}
 export const reportModes = {demo:'デモ評価',local:'端末内分析',ai:'AI分析'} as const
 export const sections = {questions:'発問の分析',dialogue:'生徒との対話',outcomes:'授業の成果',improvements:'改善点',examples:'具体的な改善発問・活動例',next:'次時への提案'} as const
 export function evidence(value:unknown, turns:Turn[], limit=3):Evidence[] {

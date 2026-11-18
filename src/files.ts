@@ -1,7 +1,7 @@
 export async function readFile(file:File):Promise<string> {
   if(file.size>15*1024*1024) throw Error('ファイルは15 MB以内にしてください。')
   const extension=file.name.split('.').pop()?.toLowerCase()
-  if(extension==='txt') return file.text()
+  if(extension==='txt'||extension==='vtt') return file.text()
   if(extension==='docx') {
     const {extractRawText}=await import('mammoth')
     return (await extractRawText({arrayBuffer:await file.arrayBuffer()})).value
@@ -30,5 +30,5 @@ export async function readFile(file:File):Promise<string> {
       return result.join('\n')
     } finally {await pdf.destroy()}
   }
-  throw Error('TXT、DOCX、CSV、テキスト付きPDFを選択してください。')
+  throw Error('VTT、TXT、DOCX、CSV、テキスト付きPDFを選択してください。')
 }

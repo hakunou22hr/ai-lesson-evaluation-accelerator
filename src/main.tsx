@@ -1,3 +1,4 @@
+import {reactionLabels,summarizeDialogue,zoomTranscript} from './dialogue'
 import {useState,type ReactNode} from 'react'
 import {createRoot} from 'react-dom/client'
 import {Activity,ArrowLeft,ArrowRight,BookOpen,Check,ChevronRight,ClipboardList,Download,FileText,FlaskConical,History,Settings,ShieldCheck,Sparkles,Upload} from 'lucide-react'
@@ -41,6 +42,7 @@ function App(){
   const [rubricApproved,setRubricApproved]=useState(false)
   const [text,setText]=useState('')
   const [turns,setTurns]=useState<Turn[]>([])
+  const [speakerToMap,setSpeakerToMap]=useState('')
   const [names,setNames]=useState('')
   const [checked,setChecked]=useState(false)
   const [report,setReport]=useState<Report|null>(null)
@@ -69,7 +71,7 @@ function App(){
     setLesson(next);setRubrics([]);setRubricApproved(false);setFocus([]);setCustom('');setSelected([]);setText(transcript);setTurns(parseTurns(transcript));setNames('');setChecked(false);setEditing(false);setRecordId('');invalidate();move(0)
   }
   const change=(patch:Partial<Lesson>)=>{setLesson(prev=>({...prev,...patch}));setRubrics([]);setRubricApproved(false);invalidate()}
-  const changeTranscript=(value:string)=>{setText(value);setTurns(parseTurns(value));setChecked(false);setReport(null);setOriginal(null)}
+  const changeTranscript=(value:string)=>{setSpeakerToMap('');const normalized=zoomTranscript(value);setText(normalized);setTurns(parseTurns(normalized));setChecked(false);setReport(null);setOriginal(null)}
   const normalizeFocus=()=>focusDraft([...new Set(namesSelected)])
   const generate=()=>run('評価規準を生成中…',async()=>{
     if(!valid) throw Error('単元名・本時の目標・授業時間を確認してください。')
@@ -117,13 +119,15 @@ function App(){
       result={...draft,mode:'ai',learning:learning.map((name,i)=>normalizeItem(verify(draft.learning?.[i]),name,turns,i)),teaching:focus.map(({name},i)=>normalizeItem(verify(draft.teaching?.[i]),name,turns))}
       for(const field of Object.keys(sections) as (keyof typeof sections)[]) if(typeof result[field]!=='string') result[field]='確認できる所見がありません。'
     }
-    setReport(result);setOriginal(result)
+    const withDialogue={...result,conversation:result.conversation??summarizeDialogue(turns)}
+    setReport(withDialogue);setOriginal(withDialogue)
   })
   const editItem=(type:'learning'|'teaching',index:number,patch:Partial<Item>)=>setReport(prev=>prev&&({...prev,[type]:prev[type].map((item,i)=>i===index?{...item,...patch}:item)}))
   const save=()=>run('履歴を保存中…',()=>{
     if(!report) return
     const id=recordId||crypto.randomUUID()
-    const entry:Saved={id,date:new Date().toISOString(),lesson,rubrics,focus,original:original||report,report}
+    const forHistory=(value:Report):Report=>value.conversation?{...value,conversation:{...value.conversation,scenes:value.conversation.scenes.filter(scene=>scene.response).slice(0,5)}}:value
+    const entry:Saved={id,date:new Date().toISOString(),lesson,rubrics,focus,original:forHistory(original||report),report:forHistory(report)}
     const next=[entry,...records.filter(r=>r.id!==id)].slice(0,30)
     setLocal('lesson-history-v1',next);setRecords(next);setRecordId(id);setNotice('評価履歴をこのブラウザーに保存しました。')
   })
@@ -181,11 +185,20 @@ function App(){
             <div className="actions"><button className="secondary" onClick={()=>move(1)}><ArrowLeft size={16}/> 戻る</button><button className="primary" onClick={()=>{if(custom.split('\n').filter(s=>s.trim()).length>2){setError('自由記述は2項目までです。');return}if(namesSelected.length&&(!focus.length||focus.some(f=>!f.A.trim()||!f.B.trim()||!f.C.trim()))){setError('追加観点の規準を生成し、A・B・Cを確認してください。');return}setApproved(true);move(3)}}>評価基準を確定 <ArrowRight size={16}/></button></div>
           </>}
           {step===3&&<>
-            <label className="drop" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();importFile(e.dataTransfer.files[0])}}><Upload size={24}/><strong>ファイルを選択、またはドラッグ＆ドロップ</strong><span>TXT・DOCX・CSV・テキスト付きPDF / 最大15 MB</span><input type="file" accept=".txt,.docx,.csv,.pdf" onChange={e=>{importFile(e.target.files?.[0]);e.target.value=''}}/></label>
+            <label className="drop" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();importFile(e.dataTransfer.files[0])}}><Upload size={24}/><strong>ファイルを選択、またはドラッグ＆ドロップ</strong><span>Zoom VTT・TXT・DOCX・CSV・テキスト付きPDF / 最大15 MB</span><input type="file" accept=".vtt,.txt,.docx,.csv,.pdf" onChange={e=>{importFile(e.target.files?.[0]);e.target.value=''}}/></label>
             <Field name="文字起こしテキスト"><textarea className="transcript" value={text} onChange={e=>changeTranscript(e.target.value)} placeholder="[00:02:10] 教師：授業の発言を貼り付けてください。"/></Field>
             <p className="stats">{text.length.toLocaleString()}文字 ／ {turns.length.toLocaleString()}行 ／ 時刻{turns.some(t=>t.time)?'あり':'なし'} ／ 話者ラベル{turns.some(t=>t.speaker)?'あり':'なし'}</p>
             <Field name="匿名化する名前（任意・読点または改行区切り）"><input value={names} onChange={e=>{setNames(e.target.value);setChecked(false)}} placeholder="例：山田太郎、鈴木花子"/></Field>
             <button className="secondary" onClick={()=>{const next=anonymize(text,names);const oldTurns=turns;changeTranscript(next);setTurns(parseTurns(next).map((turn,i)=>({...turn,speaker:anonymize(oldTurns[i]?.speaker||turn.speaker,names)})));setNotice(next===text?'自動検出による置換箇所はありません。本文を目視で確認してください。':'検出・指定した箇所を置換しました。本文を目視で確認してください。')}}><ShieldCheck size={16}/> 匿名化を適用</button>
+            {turns.some(turn=>turn.speaker)&&<details className="source">
+              <summary>Zoomの話者名をまとめて変更</summary>
+              <Field name="元の話者名"><select value={speakerToMap} onChange={e=>setSpeakerToMap(e.target.value)}><option value="">選択してください</option>{[...new Set(turns.map(turn=>turn.speaker).filter(Boolean))].map(speaker=><option key={speaker}>{speaker}</option>)}</select></Field>
+              <div className="choices">{['教師','生徒','話者不明'].map(role=><button type="button" className="secondary" disabled={!speakerToMap} key={role} onClick={()=>{
+                const assigned=role==='生徒'?`生徒${1+Math.max(0,...turns.map(turn=>Number(/^生徒(\d+)$/.exec(turn.speaker)?.[1]||0)))}`:role==='話者不明'?'':role
+                setTurns(previous=>previous.map(turn=>turn.speaker===speakerToMap?{...turn,speaker:assigned}:turn))
+                setSpeakerToMap('');setChecked(false);setReport(null);setOriginal(null)
+              }}>{role}に変更</button>)}</div>
+            </details>}
             {!!turns.length&&<details className="source"><summary>発言者の確認・修正</summary><div className="turns">{turns.map(t=><div key={t.id}><span>行{t.id} {t.time}</span><input aria-label={'行'+t.id+'の発言者'} maxLength={60} placeholder="話者不明" value={t.speaker} onChange={e=>{setTurns(prev=>prev.map(v=>v.id===t.id?{...v,speaker:e.target.value}:v));setChecked(false);setReport(null);setOriginal(null)}}/><span>{t.text}</span></div>)}</div></details>}
             {mode==='ai'&&<label className="check"><input type="checkbox" checked={checked} onChange={e=>setChecked(e.target.checked)}/>本文・話者・評価規準の個人情報を除去し、送信してよいことを確認しました</label>}
             <div className="actions"><button className="secondary" onClick={()=>move(2)}><ArrowLeft size={16}/> 戻る</button><button className="primary" disabled={!turns.length||(mode==='ai'&&!checked)} onClick={()=>move(4)}>分析へ進む <ArrowRight size={16}/></button></div>
@@ -194,6 +207,26 @@ function App(){
             <div className="actions analysis-actions"><button className="primary" disabled={!turns.length} onClick={analyze}><Sparkles size={16}/> {mode==='ai'?'AI授業分析を開始':'端末内分析を開始'}</button>{report&&<button className="secondary" onClick={()=>setEditing(!editing)}>{editing?'編集を閉じる':'評価を修正'}</button>}</div>
             {report&&<>
               <p className="muted">{reportModes[report.mode]}結果。授業研究用の所見です。{report.mode==='local'&&' 発言候補と参考判定を確認してから、必要に応じて評価を修正してください。'}</p>
+              {report.conversation&&<section className="result conversation">
+                <h3>教師の働きかけと児童・生徒の反応</h3>
+                <div className="conversation-totals">
+                  <span><b>{report.conversation.questions}</b> 発問候補</span>
+                  <span><b>{report.conversation.instructions}</b> 指示候補</span>
+                  <span><b>{report.conversation.responses}</b> 応答候補</span>
+                </div>
+                <p>応答までの発言開始時刻の差 {report.conversation.timed}件{report.conversation.median===undefined?'（計測対象なし）':`・中央値 ${report.conversation.median.toFixed(1)}秒`}</p>
+                {report.conversation.timed>0&&<div className="timing-chart" aria-label="応答までの時刻差の分布">{['5秒未満','5〜15秒未満','15秒以上'].map((label,i)=><div key={label}><span>{label}</span><meter min={0} max={report.conversation!.timed} value={report.conversation!.bins[i]}/><span>{report.conversation!.bins[i]}件</span></div>)}</div>}
+                <p className="muted">発言の順序と話者ラベルから候補を抽出しています。時刻差は発言開始から次の発言開始までです。説明や疑問は理解を振り返る手がかりです。</p>
+                <p>反応の手がかり　{Object.entries(report.conversation.signals).filter(([,count])=>count>0).map(([key,count])=>`${reactionLabels[key as keyof typeof reactionLabels]} ${count}件`).join(' ／ ')||'該当なし'}</p>
+                <details><summary>指示・発問と反応の原文を見る</summary>
+                  {report.conversation.scenes.map(scene=><article className="exchange" key={scene.prompt.id}>
+                    <b>{scene.kind==='instruction'?'指示候補':'発問候補'}</b>
+                    <blockquote>行{scene.prompt.id} {scene.prompt.time}「{scene.prompt.quote}」</blockquote>
+                    {scene.response?<><b>児童・生徒の反応候補 · {reactionLabels[scene.reaction||'other']}{scene.seconds===undefined?'':` · ${scene.seconds}秒`}</b><blockquote>行{scene.response.id} {scene.response.time}「{scene.response.quote}」</blockquote></>:<p>対応する応答は記録から確認できませんでした。</p>}
+                    {scene.followUp&&<blockquote>続く発問　行{scene.followUp.id} {scene.followUp.time}「{scene.followUp.quote}」</blockquote>}
+                  </article>)}
+                </details>
+              </section>}
               {(['learning','teaching'] as const).map(group=><section key={group}><h3>{group==='learning'?'3観点に関連する学習状況':'授業者が指定した指導上の観点'}</h3>
                 {!report[group].length&&<p>追加観点はありません。</p>}
                 {report[group].map((item,i)=><article className="result" key={item.name}><h4><span className={'grade '+(grades.indexOf(item.grade)<3?item.grade:'unknown')}>{item.grade}</span>{item.name}</h4>
@@ -206,7 +239,7 @@ function App(){
           {step===5&&report&&<>
             <div className="report-preview"><FileText size={34}/><div><h3>{lesson.unit}</h3><p>{lesson.school}{lesson.grade}年・{lesson.course||lesson.subject}　／　{reportModes[report.mode]}</p><p className="muted">A4縦・2ページ</p></div></div>
             <ol className="page-list"><li>授業評価結果・各観点の判定・授業の成果</li><li>根拠発言・対話と発問・改善提案・参照資料</li></ol>
-            <p className="muted">履歴はこのブラウザーに保存します。文字起こし全文は保存対象外です。評価に含まれる引用や授業者名は残ります。</p>
+            <p className="muted">履歴はこのブラウザーに保存します。文字起こし全文は保存対象外です。評価に含まれる引用、対話例（最大5件）、授業者名は残ります。</p>
             <div className="actions"><button className="secondary" onClick={()=>move(4)}><ArrowLeft size={16}/> 評価へ戻る</button><button className="secondary" onClick={save}><History size={16}/> 履歴を保存</button><button className="primary" onClick={download}><Download size={16}/> PDFをダウンロード</button></div>
           </>}
           </fieldset>
