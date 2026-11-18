@@ -258,17 +258,17 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
     ctx.fillStyle='#536d86';ctx.fillText(`全文  ${pdf.getNumberOfPages()-2}`,M,H-29)
     y=92
   }
-  const detail=(value:string,title=false)=>{
+  const detail=(value:string,title=false,indent=0)=>{
     const size=title?17:14
     const style=()=>{
       ctx.font=`${size}px "Report Japanese"`
       ctx.fillStyle=title?'#174d81':'#233650'
     }
     style()
-    const lines=wrapText(ctx,value,CONTENT)
+    const lines=wrapText(ctx,value,CONTENT-indent)
     for(const line of lines){
       if(y+size+7>BOTTOM){newPage();style()}
-      ctx.fillText(line,M,y);y+=size+7
+      ctx.fillText(line,M+indent,y);y+=size+7
     }
   }
   const block=(title:string,body:string[])=>{
@@ -277,18 +277,42 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
     for(const paragraph of body) if(paragraph) detail(paragraph)
     y+=12
   }
+  const field=(label:string,value:string,fill:string)=>{
+    if(!value.trim()) return
+    if(y+53>BOTTOM) newPage()
+    ctx.fillStyle=fill
+    ctx.fillRect(M,y,CONTENT,22)
+    ctx.font='12px "Report Japanese"';ctx.fillStyle='#214d6b'
+    ctx.fillText(label,M+10,y+3)
+    y+=25
+    detail(value,false,10)
+    y+=7
+  }
+  const assessment=(group:string,item:Item)=>{
+    const status=assessmentStatus(item)
+    if(y+139>BOTTOM) newPage()
+    const tone=grades[status]
+    ctx.fillStyle=tone.bar;ctx.fillRect(M,y,4,22)
+    ctx.font='13px "Report Japanese"';ctx.fillStyle=tone.ink
+    ctx.fillText(`${group}  /  ${status}`,M+11,y+1)
+    y+=24
+    detail(item.name,true)
+    y+=4
+    field('今回わかったこと',item.reason,'#eaf3fc')
+    if(item.missing) field('次に確かめること',item.missing,'#fff5df')
+    field('次の授業で使える問い',item.improvement,'#e7f4ee')
+    if(item.evidence.length) field('根拠になった発言',item.evidence.map(entry=>
+      `行${entry.id}${entry.time?' ・ '+entry.time:''}「${entry.quote}」`).join('\n'),'#eff2f6')
+    y+=16
+  }
   newPage()
   block('授業情報',[
     `${lesson.school}${lesson.grade}年｜${lesson.course||lesson.subject}｜${lesson.unit}`,
     '本時の目標　'+lesson.goal,
   ])
-  for(const [group,items] of [['学習状況',report.learning],['指導上の観点',report.teaching]] as const){
-    for(const item of items) block(`${group}｜${item.name}｜${assessmentStatus(item)}`,[
-      '評価理由　'+item.reason,
-      item.missing?'確認したい資料　'+item.missing:'',
-      '改善提案・問い返し　'+item.improvement,
-      ...item.evidence.map(entry=>`根拠 行${entry.id} ${entry.time}「${entry.quote}」`),
-    ])
+  field('判定の読み方','「確認待ち」は関連する発言があり、授業者の確認が必要な項目です。「根拠不足」は記録から関連する発言を確認できなかった項目です。A・B・Cは設定した規準に照らした参考判定です。','#eef3f8')
+  for(const [group,items] of [['生徒の学習状況',report.learning],['教師の指導',report.teaching]] as const){
+    for(const item of items) assessment(group,item)
   }
   for(const key of Object.keys(sections) as (keyof typeof sections)[]) block(sections[key],[report[key]])
   block('評価規準の出典',sources.map(source=>`${source.name}（${source.year}年） ${source.section}\n${source.url}`))
