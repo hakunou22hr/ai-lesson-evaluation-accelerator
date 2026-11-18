@@ -111,3 +111,7 @@ blockquote{margin:8px 0 0;padding:7px 10px;background:#f2f6fb;border-left:3px so
 .exchange{padding:10px 0;border-top:1px solid #e0e8f0}
 .exchange blockquote{margin:4px 0 8px}
 .grade.review{background:#fff5d8;color:#654b10}
+.chat-input{margin-top:12px}
+.chat-columns{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px}
+.chat-columns>div{min-width:0;background:#f1f6fc;border-radius:8px;padding:10px;overflow-wrap:anywhere}
+@media(max-width:600px){.chat-columns{grid-template-columns:1fr}}

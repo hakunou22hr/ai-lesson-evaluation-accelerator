@@ -1,3 +1,4 @@
+import {ChatComparison} from './ChatComparison'
 import {dialogueObservation,relevantScene,type DialogueScene,reactionLabels,summarizeDialogue,zoomTranscript} from './dialogue'
 import {useState,type ReactNode} from 'react'
 import {createRoot} from 'react-dom/client'
@@ -212,6 +213,7 @@ function App(){
             <div className="actions analysis-actions"><button className="primary" disabled={!turns.length} onClick={analyze}><Sparkles size={16}/> {mode==='ai'?'AI授業分析を開始':'端末内分析を開始'}</button>{report&&<button className="secondary" onClick={()=>setEditing(!editing)}>{editing?'編集を閉じる':'評価を修正'}</button>}</div>
             {report&&<>
               <p className="muted">{reportModes[report.mode]}結果。授業研究用の所見です。{report.mode==='local'&&' 発言候補と参考判定を確認してから、必要に応じて評価を修正してください。'}</p>
+              {original?.mode==='local'&&turns.length>0&&<ChatComparison lesson={lesson} rubrics={rubrics} focus={focus} turns={turns} baseline={original} current={report} apply={setReport}/>}
               <p className="muted">確認待ち：発言候補あり。根拠不足：規準と照合できる発言候補なし。</p>
               {report.conversation&&<section className="result conversation">
                 <h3>教師の働きかけと児童・生徒の反応</h3>
@@ -238,7 +240,7 @@ function App(){
               {(['learning','teaching'] as const).map(group=><section key={group}><h3>{group==='learning'?'3観点に関連する学習状況':'授業者が指定した指導上の観点'}</h3>
                 {!report[group].length&&<p>追加観点はありません。</p>}
                 {report[group].map((item,i)=>{const status=assessmentStatus(item);const scene=relevantScene(report.conversation?.scenes||[],item.evidence);return <article className="result" key={item.name}><h4><span className={'grade '+(status==='確認待ち'?'review':status==='根拠不足'?'unknown':status)}>{status}</span>{item.name}</h4>
-                {editing?<><Field name="判定"><select value={item.grade} onChange={e=>editItem(group,i,{grade:e.target.value as Grade})}>{grades.map(g=><option key={g}>{g}</option>)}</select></Field><Field name="評価理由"><textarea value={item.reason} onChange={e=>editItem(group,i,{reason:e.target.value})}/></Field><Field name="改善提案"><textarea value={item.improvement} onChange={e=>editItem(group,i,{improvement:e.target.value})}/></Field></>:<><p>{item.reason}</p><p><b>改善提案</b>　{item.improvement}</p></>}
+                {editing?<><Field name="判定"><select value={item.grade} onChange={e=>editItem(group,i,{grade:e.target.value as Grade})}>{grades.map(g=><option key={g}>{g}</option>)}</select></Field><Field name="評価理由"><textarea value={item.reason} onChange={e=>editItem(group,i,{reason:e.target.value})}/></Field><Field name="改善提案"><textarea value={item.improvement} onChange={e=>editItem(group,i,{improvement:e.target.value})}/></Field></>:<><p>{item.reason}</p>{item.missing&&<p><b>確認したい資料</b>　{item.missing}</p>}<p><b>改善提案</b>　{item.improvement}</p></>}
                 {item.evidence.map(e=><blockquote key={e.id+e.quote}>行{e.id} {e.time}「{e.quote}」</blockquote>)}
                 {scene&&<details><summary>この観点の対話の流れ</summary><DialogueExcerpt scene={scene}/></details>}</article>})}</section>)}
               {(Object.keys(sections) as (keyof typeof sections)[]).map(field=><article className="result" key={field}>{editing?<Field name={sections[field]}><textarea value={report[field]} onChange={e=>setReport({...report,[field]:e.target.value})}/></Field>:<><h4>{sections[field]}</h4><p>{report[field]}</p></>}</article>)}

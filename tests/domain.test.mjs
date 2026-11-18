@@ -132,3 +132,26 @@ test('確認待ちと根拠不足を区別し、次の応答を原文付きで�
   const noName=summarizeDialogue(parseTurns(lines.replaceAll('生徒A','生徒'))).scenes[0]
   assert.equal(noName.sameLearner,false)
 })
+
+test('ChatGPTの評価案を原文・時刻・観点と照合する',async()=>{
+  const {chatRequest,readChatResult,chatFields}=await import('../src/chatgpt.ts')
+  const turns=parseTurns('[00:10] 教師：どの値を比べましたか？\n[00:12] 生徒A：電圧が２倍なので電流も２倍です。')
+  const rubrics=drafts(demo)
+  const focus=focusDraft([focuses[0]])
+  const request=chatRequest({...demo,teacher:'波田太郎'},rubrics,focus,turns)
+  assert.match(request,/どの値を比べましたか/)
+  assert.ok(!request.includes('波田太郎'))
+  const row=(name)=>({name,grade:'判定不能',reason:'規準を確認します。',missing:'ワークシート',improvement:'どの値が根拠ですか？',evidence:[]})
+  const input={version:1,learning:rubrics.map(r=>row(r.name)),teaching:focus.map(f=>row(f.name)),...Object.fromEntries(chatFields.map(key=>[key,'所見']))}
+  Object.assign(input.learning[0],{grade:'B',evidence:[{id:1,time:'00:10',quote:'どの値を比べましたか？'},{id:2,time:'00:12',quote:'電流も２倍です。'}]})
+  const encoded=JSON.stringify(input)
+  const output=readChatResult(encoded,focus,turns)
+  assert.equal(output.learning[0].grade,'B')
+  assert.equal(output.learning[0].source,'chatgpt')
+  assert.equal(output.learning[0].evidence.length,2)
+  assert.throws(()=>readChatResult(encoded.replace('00:12','00:13'),focus,turns),/照合できません/)
+  assert.throws(()=>readChatResult(encoded.replace('電流も２倍です。','元にない発言'),focus,turns),/照合できません/)
+  assert.throws(()=>readChatResult(encoded,[],turns),/観点数/)
+  input.learning[0].evidence.pop()
+  assert.throws(()=>readChatResult(JSON.stringify(input),focus,turns),/根拠が不足/)
+})
