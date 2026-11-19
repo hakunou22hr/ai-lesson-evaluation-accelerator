@@ -190,3 +190,16 @@ test('物理基礎の浮力では測定値を使う規準を提示する',()=>{
   assert.match(rules[1].B,/二つの測定結果を比較/)
   assert.match(rules[1].C,/本人の説明も記録/)
 })
+
+test('目標や規準がない振り返りでも、発言に基づく次の問いを提示する',async()=>{
+  const {reflectionReport}=await import('../src/reflection.ts')
+  const text='[00:10] 教師：どうしてそう考えましたか？\n[00:15] 生徒A：手で支えているからです。'
+  const report=reflectionReport(parseTurns(text))
+  assert.deepEqual(report.learning,[])
+  assert.deepEqual(report.teaching,[])
+  assert.equal(report.improvementScenes[0].evidence[1].time,'00:15')
+  assert.match(report.improvementScenes[0].check,/同じ生徒/)
+  const unknown=reflectionReport(parseTurns(text.replace('生徒A：','')))
+  assert.equal(unknown.improvementScenes.length,0)
+  assert.match(unknown.improvements,/発言者の役割/)
+})

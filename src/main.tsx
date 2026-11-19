@@ -1,3 +1,4 @@
+import {reflectionReport} from './reflection'
 import {ImprovementCard} from './ImprovementScenes'
 import {ReadMore} from './ReadMore'
 import {ChatComparison} from './ChatComparison'
@@ -42,6 +43,7 @@ function Field({name,children,required=false,wide=false}:{name:string;children:R
 function App(){
   const [lesson,setLesson]=useState<Lesson>(empty)
   const [step,setStep]=useState(0)
+  const [reflection,setReflection]=useState(false)
   const [rubrics,setRubrics]=useState<Rubric[]>([])
   const [selected,setSelected]=useState<string[]>([])
   const [custom,setCustom]=useState('')
@@ -76,13 +78,14 @@ function App(){
   }
   const invalidate=()=>{setApproved(false);setReport(null);setOriginal(null)}
   const reset=(next:Lesson,transcript='')=>{
-    setLesson(next);setRubrics([]);setRubricApproved(false);setFocus([]);setCustom('');setSelected([]);setText(transcript);setTurns(parseTurns(transcript));setNames('');setChecked(false);setEditing(false);setRecordId('');invalidate();move(0)
+    setReflection(false);setLesson(next);setRubrics([]);setRubricApproved(false);setFocus([]);setCustom('');setSelected([]);setText(transcript);setTurns(parseTurns(transcript));setNames('');setChecked(false);setEditing(false);setRecordId('');invalidate();move(0)
   }
   const change=(patch:Partial<Lesson>)=>{setLesson(prev=>({...prev,...patch}));setRubrics([]);setRubricApproved(false);invalidate()}
   const changeTranscript=(value:string)=>{setSpeakerToMap('');const normalized=zoomTranscript(value);setText(normalized);setTurns(parseTurns(normalized));setChecked(false);setReport(null);setOriginal(null)}
   const normalizeFocus=()=>focusDraft([...new Set(namesSelected)])
   const generate=()=>run('評価規準を生成中…',async()=>{
     if(!valid) throw Error('単元名・本時の目標・授業時間を確認してください。')
+    setReflection(false)
     const draft=drafts(lesson)
     if(mode==='ai') {
       const response=await ai<{items:unknown[]}>('rubric',{lesson:{...lesson,teacher:'',date:''},sources:curriculum,draft},key)
@@ -109,7 +112,8 @@ function App(){
     if(text.length>100000) throw Error('文字起こしは10万文字以内にしてください。')
     const learning=perspectives
     let result:Report
-    if(mode==='local') result=localReport(lesson,rubrics,focus,turns)
+    if(reflection) result=reflectionReport(turns)
+    else if(mode==='local') result=localReport(lesson,rubrics,focus,turns)
     else {
       if(!checked||!consent) throw Error('送信前に匿名化と外部送信条件を確認してください。')
       const batches=chunks(turns)
@@ -140,7 +144,7 @@ function App(){
     setLocal('lesson-history-v1',next);setRecords(next);setRecordId(id);setNotice('評価履歴をこのブラウザーに保存しました。')
   })
   const restore=(item:Saved)=>{
-    setLesson(item.lesson);setRubrics(item.rubrics);setFocus(item.focus);setSelected(item.focus.map(f=>f.name).filter(n=>focuses.includes(n)));setCustom(item.focus.map(f=>f.name).filter(n=>!focuses.includes(n)).join('\n'));setApproved(true);setRubricApproved(true);setText('');setTurns([]);setNames('');setChecked(false);setEditing(false);setOriginal(item.original);setReport(item.report);setRecordId(item.id);setModal(null);move(5)
+    setReflection(!!item.report.reflectionFocus);setLesson(item.lesson);setRubrics(item.rubrics);setFocus(item.focus);setSelected(item.focus.map(f=>f.name).filter(n=>focuses.includes(n)));setCustom(item.focus.map(f=>f.name).filter(n=>!focuses.includes(n)).join('\n'));setApproved(true);setRubricApproved(true);setText('');setTurns([]);setNames('');setChecked(false);setEditing(false);setOriginal(item.original);setReport(item.report);setRecordId(item.id);setModal(null);move(5)
   }
   const download=()=>run('PDFを作成・検査中…',async()=>{
     if(!report) return
@@ -155,7 +159,7 @@ function App(){
     </div></header>
     <section className="hero"><div className="wrap hero-inner"><div><p className="eyebrow"><span/> 授業研究ワークスペース</p><h1>授業評価ワークスペース</h1><p>授業の目標と記録から、次の授業につながる振り返りを。</p></div><span className="mode"><FlaskConical size={16}/> {mode==='local'?'端末内分析・APIキー不要':'本番AIモード'}</span></div></section>
     <main className="wrap">
-      <nav className="steps" aria-label="進行状況">{steps.map((label,index)=><button key={label} type="button" disabled={index>maxStep||!!busy} onClick={()=>move(index)} aria-current={index===step?'step':undefined} className={index===step?'active':index<step?'complete':''}><span>{index<step?<Check size={14}/>:index+1}</span>{label}{index<5&&<ChevronRight className="step-arrow" size={15}/>}</button>)}</nav>
+      <nav className="steps" aria-label="進行状況">{steps.map((label,index)=><button key={label} type="button" disabled={index>maxStep||!!busy||(reflection&&(index===1||index===2))} onClick={()=>move(index)} aria-current={index===step?'step':undefined} className={index===step?'active':index<step?'complete':''}><span>{index<step?<Check size={14}/>:index+1}</span>{label}{index<5&&<ChevronRight className="step-arrow" size={15}/>}</button>)}</nav>
       <div className="layout">
         <section className="panel workspace">
           <div className="step-title"><span className="step-icon">{[<BookOpen/>,<ClipboardList/>,<Sparkles/>,<Upload/>,<Activity/>,<FileText/>][step]}</span><div><div className="kicker">STEP 0{step+1} / 06</div><h2>{titles[step]}</h2></div></div>
@@ -165,6 +169,9 @@ function App(){
           {busy&&<p className="alert progress" role="status">{busy}</p>}
           <fieldset disabled={!!busy} className="page-content">
           {step===0&&<>
+            <section className="result"><h3>授業の振り返り</h3><p>目標や評価規準が未設定でも、対話を読み込み、次に確かめたいことを整理できます。</p>
+              <button type="button" className="primary" onClick={()=>{setReflection(true);setRubrics([]);setFocus([]);setRubricApproved(false);setApproved(true);setReport(null);setOriginal(null);setRecordId('');move(3)}}>目標なしでも振り返りを始める</button>
+            </section>
             <div className="form-grid">
             <Field name="校種" required><select value={lesson.school} onChange={e=>{const school=e.target.value as Lesson['school'];change({school,grade:'1',subject:schools[school][0],course:''})}}>{Object.keys(schools).map(s=><option key={s}>{s}</option>)}</select></Field>
             <Field name="学年" required><select value={lesson.grade} onChange={e=>change({grade:e.target.value})}>{Array.from({length:lesson.school==='小学校'?6:3},(_,i)=><option key={i} value={i+1}>{i+1}年</option>)}</select></Field>
@@ -209,12 +216,18 @@ function App(){
               }}>{role}に変更</button>)}</div>
             </details>}
             {!!turns.length&&<details className="source"><summary>発言者の確認・修正</summary><div className="turns">{turns.map(t=><div key={t.id}><span>行{t.id} {t.time}</span><input aria-label={'行'+t.id+'の発言者'} maxLength={60} placeholder="話者不明" value={t.speaker} onChange={e=>{setTurns(prev=>prev.map(v=>v.id===t.id?{...v,speaker:e.target.value}:v));setChecked(false);setReport(null);setOriginal(null)}}/><span>{t.text}</span></div>)}</div></details>}
-            {mode==='ai'&&<label className="check"><input type="checkbox" checked={checked} onChange={e=>setChecked(e.target.checked)}/>本文・話者・評価規準の個人情報を除去し、送信してよいことを確認しました</label>}
-            <div className="actions"><button className="secondary" onClick={()=>move(2)}><ArrowLeft size={16}/> 戻る</button><button className="primary" disabled={!turns.length||(mode==='ai'&&!checked)} onClick={()=>move(4)}>分析へ進む <ArrowRight size={16}/></button></div>
+            {mode==='ai'&&!reflection&&<label className="check"><input type="checkbox" checked={checked} onChange={e=>setChecked(e.target.checked)}/>本文・話者・評価規準の個人情報を除去し、送信してよいことを確認しました</label>}
+            <div className="actions"><button className="secondary" onClick={()=>move(reflection?0:2)}><ArrowLeft size={16}/> 戻る</button><button className="primary" disabled={!turns.length||(mode==='ai'&&!reflection&&!checked)} onClick={()=>move(4)}>分析へ進む <ArrowRight size={16}/></button></div>
           </>}
           {step===4&&<>
-            <div className="actions analysis-actions"><button className="primary" disabled={!turns.length} onClick={analyze}><Sparkles size={16}/> {mode==='ai'?'AI授業分析を開始':'端末内分析を開始'}</button>{report&&<button className="secondary" onClick={()=>setEditing(!editing)}>{editing?'編集を閉じる':'評価を修正'}</button>}</div>
+            <div className="actions analysis-actions"><button className="primary" disabled={!turns.length} onClick={analyze}><Sparkles size={16}/> {reflection?'授業の振り返りを開始':mode==='ai'?'AI授業分析を開始':'端末内分析を開始'}</button>{report&&<button className="secondary" onClick={()=>setEditing(!editing)}>{editing?'編集を閉じる':'評価を修正'}</button>}</div>
             {report&&<>
+              {report.reflectionFocus&&<section className="result"><h3>対話から見えたこと</h3>
+                <p><b>振り返りの観点案</b>　{report.reflectionFocus}</p>
+                <ReadMore text={report.outcomes}/>
+                <p><b>判定のために確かめること</b>　{report.improvements}</p>
+                <p className="muted">A・B・Cを付けたい場合は、授業情報で目標を入力し、評価規準を確認してから分析します。</p>
+              </section>}
               <p className="muted">{reportModes[report.mode]}結果。授業研究用の所見です。{report.mode==='local'&&' 発言候補と参考判定を確認してから、必要に応じて評価を修正してください。'}</p>
               {original?.mode==='local'&&turns.length>0&&<ChatComparison lesson={lesson} rubrics={rubrics} focus={focus} turns={turns} baseline={original} current={report} apply={setReport}/>}
               {!!report.improvementScenes?.length&&<section><h3>次の授業で試すこと</h3>
@@ -222,7 +235,7 @@ function App(){
                   <button type="button" className="secondary" onClick={()=>setReport({...report,improvementScenes:report.improvementScenes?.filter((_,index)=>index!==i)})}>採用を解除</button>
                 </ImprovementCard>)}
               </section>}
-              <p className="muted">確認待ち：発言候補あり。根拠不足：規準と照合できる発言候補なし。</p>
+              {!report.reflectionFocus&&<p className="muted">確認待ち：発言候補あり。根拠不足：規準と照合できる発言候補なし。</p>}
               {report.conversation&&<section className="result conversation">
                 <h3>教師の働きかけと児童・生徒の反応</h3>
                 <div className="conversation-totals">
@@ -245,7 +258,7 @@ function App(){
                   </article>)}
                 </details>
               </section>}
-              {(['learning','teaching'] as const).map(group=><section key={group}><h3>{group==='learning'?'3観点に関連する学習状況':'授業者が指定した指導上の観点'}</h3>
+              {!report.reflectionFocus&&(['learning','teaching'] as const).map(group=><section key={group}><h3>{group==='learning'?'3観点に関連する学習状況':'授業者が指定した指導上の観点'}</h3>
                 {!report[group].length&&<p>追加観点はありません。</p>}
                 {report[group].map((item,i)=>{const status=assessmentStatus(item);const scene=relevantScene(report.conversation?.scenes||[],item.evidence);return <article className="result" key={item.name}><h4><span className={'grade '+(status==='確認待ち'?'review':status==='根拠不足'?'unknown':status)}>{status}</span>{item.name}</h4>
                 {editing?<><Field name="判定"><select value={item.grade} onChange={e=>editItem(group,i,{grade:e.target.value as Grade})}>{grades.map(g=><option key={g}>{g}</option>)}</select></Field><Field name="評価理由"><textarea value={item.reason} onChange={e=>editItem(group,i,{reason:e.target.value})}/></Field><Field name="改善提案"><textarea value={item.improvement} onChange={e=>editItem(group,i,{improvement:e.target.value})}/></Field></>:<><ReadMore text={item.reason}/>{item.missing&&<ReadMore text={`確認したい資料　${item.missing}`}/>}<ReadMore text={`改善提案　${item.improvement}`}/></>}

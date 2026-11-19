@@ -5,7 +5,7 @@ const groups=['learning','teaching'] as const
 export const chatFields=['questions','dialogue','outcomes','improvements','examples','next'] as const
 export type ChatResult=Pick<Report,typeof chatFields[number]>&Record<typeof groups[number],(Item|undefined)[]>&{missing:string[]; ignored:string[]; improvementScenes:ImprovementScene[]}
 
-export function chatRequest(lesson:Lesson,rubrics:Rubric[],focus:Focus[],turns:Turn[]) {
+export function chatRequest(lesson:Lesson,rubrics:Rubric[],focus:Focus[],turns:Turn[],reflectionFocus?:string) {
   const shape={version:1,learning:rubrics.map(r=>({name:r.name,grade:'判定不能',reason:'',missing:'',improvement:'',evidence:[]})),
     teaching:focus.map(f=>({name:f.name,grade:'判定不能',reason:'',missing:'',improvement:'',evidence:[]})),
     improvementScenes:[{title:'',keep:'',change:'',question:'',check:'',evidence:[]}],
@@ -15,13 +15,13 @@ export function chatRequest(lesson:Lesson,rubrics:Rubric[],focus:Focus[],turns:T
 grade は A、B、C、判定不能のいずれか。評価理由は reason、足りない材料は missing、次に教師がその場で使える具体的な発問は improvement。引用は evidence に最大4件、各項目は {"id":発言の行番号,"time":"元のtimeをそのまま（空なら空文字）","quote":"元のtextに完全一致する連続した部分"}。根拠がない場合は判定不能として空配列。3観点でA/B/Cを示す場合は児童・生徒と明示された発言を含めてください。時刻や引用を創作しないでください。
 questions に発問の所見、dialogue に対話の流れ、outcomes に授業の成果、improvements に改善点、examples に具体的な改善発問、next に次時の提案を入力してください。各記述は日本語で簡潔に（各600字以内）。reason の最初の一文に、授業者に伝えたい結論を平易な言葉で書いてください。missing には具体的に確認したい発言や成果物を書いてください。
 improvementScenes は A・B・C の観点別評価とは別に、次の授業で試す改善場面を優先順に最大3件。title は場面名、keep は残したい教師の働きかけ、change は次回その場面で何をどう変えるか、question は生徒にそのまま使える一つの問い、check は改善を確かめるために集める生徒の発言や記述。各項目を1文で簡潔に。evidence にその場面の原文を1〜4件、上記と同じ id・time・quote 形式で入れる。確認できない反応は補わない。根拠のある場面がなければ空配列。
-次の形のJSONオブジェクトだけを返してください。観点名を変更せず、各観点をちょうど1回含めてください。
+${reflectionFocus?'自己評価の振り返りです。learning と teaching は空配列のままにし、授業目標の達成度を推定せず、観点案に沿って発言と改善案を示してください。振り返りの観点案：'+reflectionFocus+'\n':''}次の形のJSONオブジェクトだけを返してください。観点名を変更せず、各観点をちょうど1回含めてください。
 ${JSON.stringify(shape)}
 分析対象：
 ${JSON.stringify({lesson:{school:lesson.school,grade:lesson.grade,subject:lesson.subject,course:lesson.course,unit:lesson.unit,goal:lesson.goal},rubrics,focus,turns})}`
 }
 
-export function readChatResult(raw:string,focus:Focus[],turns:Turn[]):ChatResult {
+export function readChatResult(raw:string,focus:Focus[],turns:Turn[],reflection=false):ChatResult {
   if(!turns.length) throw Error('引用を照合するため、元の文字起こしを読み込んでください。')
   if(raw.length>150000) throw Error('貼り付けた結果が長すぎます。')
   let value
@@ -57,7 +57,7 @@ export function readChatResult(raw:string,focus:Focus[],turns:Turn[]):ChatResult
       return {name,grade:row.grade,reason:requiredText(row.reason,name+'の評価理由'),missing:requiredText(row.missing,name+'の不足資料',true),improvement:requiredText(row.improvement,name+'の発問例'),evidence:verified,source:'chatgpt'}
     })
   }
-  const result={learning:readGroup('learning',perspectives),teaching:readGroup('teaching',focus.map(f=>f.name))}
+  const result={learning:readGroup('learning',reflection?[]:perspectives),teaching:readGroup('teaching',focus.map(f=>f.name))}
   const scenes:unknown=value.improvementScenes===undefined?[]:value.improvementScenes
   if(!Array.isArray(scenes)||scenes.length>3) throw Error('授業改善案は3件以内の一覧にしてください。')
   const improvementScenes:ImprovementScene[]=scenes.map((scene,index)=>{

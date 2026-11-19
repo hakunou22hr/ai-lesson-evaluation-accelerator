@@ -28,7 +28,7 @@ function font() {
 export function filename(l:Lesson) {
   const school={小学校:'小',中学校:'中',高等学校:'高'}[l.school]
   const date=l.date||new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Tokyo'}).format(new Date())
-  return `授業評価_${school}${l.grade}_${l.course||l.subject}_${l.unit.slice(0,60)}_${date}.pdf`.replace(/[\\/:*?"<>|]/g,'_')
+  return `授業評価_${school}${l.grade}_${l.course||l.subject}_${(l.unit||'授業の振り返り').slice(0,60)}_${date}.pdf`.replace(/[\\/:*?"<>|]/g,'_')
 }
 export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
   const [{jsPDF}]=await Promise.all([import('jspdf'),font()])
@@ -201,16 +201,16 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
     }
     write('AI授業評価 Accelerator',1,14,'#396588')
     y+=8
-    write(number===1?'授業評価結果':'授業分析と改善提案',1,30)
+    write(number===1?(report.reflectionFocus?'授業の振り返り':'授業評価結果'):'授業分析と改善提案',1,30)
     if(number===1) {
       write(`${lesson.school}${lesson.grade}年 ｜ ${lesson.course||lesson.subject} ｜ ${lesson.minutes}分 ｜ ${lesson.date||'授業日未入力'}`,1)
       write(lesson.unit+(lesson.teacher?' ｜ '+lesson.teacher:''),1,19)
-      write('本時の目標　'+lesson.goal,2)
-      write(reportModes[report.mode]+(report.chatNotes||report.improvementScenes?.length||[...report.learning,...report.teaching].some(item=>item.source==='chatgpt')?'・ChatGPT評価案を反映':'')+'・授業研究用',1,13,'#396588')
+      write(lesson.goal?'本時の目標　'+lesson.goal:report.reflectionFocus?'振り返りの観点案　'+report.reflectionFocus:'本時の目標　未設定',2)
+      write(reportModes[report.mode]+(report.chatNotes||report.improvementScenes?.some(scene=>scene.source!=='local')||[...report.learning,...report.teaching].some(item=>item.source==='chatgpt')?'・ChatGPT評価案を反映':'')+'・授業研究用',1,13,'#396588')
       distribution()
       timingSnapshot()
-      heading('3観点に関連する学習状況')
-      evaluationCards(report.learning,3,true)
+      if(report.reflectionFocus){if(lesson.goal) write('振り返りの観点案　'+report.reflectionFocus,2,13);heading('確認できたこと');write(report.outcomes,3);heading('次に確かめること');write(report.improvements,2)}
+      else {heading('3観点に関連する学習状況');evaluationCards(report.learning,3,true)}
       if(report.teaching.length){
         heading('授業者が指定した指導上の観点')
         evaluationCards(report.teaching,report.teaching.length>10?3:2,false)
@@ -242,8 +242,8 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
       heading('自己評価メモ')
       noteCards([['残したい働きかけ','________________________________'],['次時に変える指示・問い','________________________________']],62)
       write('授業研究・振り返り用。正式な成績や人事評価の資料として自動確定しない。',1,11)
-      heading('評価規準の出典')
-      for(const source of sources){
+      if(!report.reflectionFocus) heading('評価規準の出典')
+      for(const source of report.reflectionFocus?[]:sources){
         write(`${source.name}（${source.year}年） ${source.section}`,2,12)
         write(source.url,1,11,'#285c85')
       }
@@ -324,9 +324,9 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
   newPage()
   block('授業情報',[
     `${lesson.school}${lesson.grade}年｜${lesson.course||lesson.subject}｜${lesson.unit}`,
-    '本時の目標　'+lesson.goal,
+    lesson.goal?'本時の目標　'+lesson.goal:report.reflectionFocus?'振り返りの観点案　'+report.reflectionFocus:'本時の目標　未設定',
   ])
-  field('判定の読み方','「確認待ち」は関連する発言があり、授業者の確認が必要な項目です。「根拠不足」は記録から関連する発言を確認できなかった項目です。A・B・Cは設定した規準に照らした参考判定です。','#eef3f8')
+  if(!report.reflectionFocus) field('判定の読み方','「確認待ち」は関連する発言があり、授業者の確認が必要な項目です。「根拠不足」は記録から関連する発言を確認できなかった項目です。A・B・Cは設定した規準に照らした参考判定です。','#eef3f8')
   for(const [index,scene] of (report.improvementScenes||[]).entries()){
     if(y+116>BOTTOM) newPage()
     detail(`次の授業で試すこと ${index+1}｜${scene.title}`,true)
@@ -341,7 +341,7 @@ export async function createPdf(lesson:Lesson,report:Report,sources:Source[]) {
     for(const item of items) assessment(group,item)
   }
   for(const key of Object.keys(sections) as (keyof typeof sections)[]) block(sections[key],[report[key]])
-  block('評価規準の出典',sources.map(source=>`${source.name}（${source.year}年） ${source.section}\n${source.url}`))
+  if(!report.reflectionFocus) block('評価規準の出典',sources.map(source=>`${source.name}（${source.year}年） ${source.section}\n${source.url}`))
   flush()
   appendix.width=0
   if(pdf.getNumberOfPages()<3||pdf.internal.pageSize.getWidth()<209.9||pdf.internal.pageSize.getHeight()<296.9) throw Error('PDFのページ検査に失敗しました。')

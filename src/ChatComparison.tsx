@@ -13,14 +13,14 @@ export function ChatComparison({lesson,rubrics,focus,turns,baseline,current,appl
   const [message,setMessage]=useState('')
   const [error,setError]=useState('')
   const copy=async()=>{
-    const payload=chatRequest(lesson,rubrics,focus,turns)
+    const payload=chatRequest(lesson,rubrics,focus,turns,baseline.reflectionFocus)
     setRequest(payload);setError('');setMessage('')
     try{await navigator.clipboard.writeText(payload);setMessage('分析依頼をコピーしました。内容を確認し、ChatGPTに貼り付けてください。')}
     catch{setMessage('下の分析依頼文を選択してコピーしてください。')}
   }
   const read=()=>{
     setError('');setMessage('')
-    try{setCandidate(readChatResult(raw,focus,turns));setMessage('引用と時刻を照合しました。所見と発問例は比較欄で確認し、採用する項目を選んでください。')}
+    try{setCandidate(readChatResult(raw,focus,turns,!!baseline.reflectionFocus));setMessage('引用と時刻を照合しました。所見と発問例は比較欄で確認し、採用する項目を選んでください。')}
     catch(e){setCandidate(undefined);setError(e instanceof Error?e.message:'結果を取り込めませんでした。')}
   }
   return <section className="result chat-compare">
